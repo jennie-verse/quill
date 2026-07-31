@@ -1,6 +1,6 @@
 {
-  "name": "Text Editor",
-  "short_name": "Editor",
+  "name": "Quill",
+  "short_name": "Quill",
   "description": "A private, offline-friendly text editor for files saved through Files.",
   "start_url": "./",
   "scope": "./",

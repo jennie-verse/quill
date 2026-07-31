@@ -1,5 +1,5 @@
-const CACHE_PREFIX = "text-editor-";
-const CACHE_VERSION = "text-editor-v2";
+const CACHE_PREFIX = "quill-";
+const CACHE_VERSION = "quill-v1";
 const CORE_ASSETS = [
   "./",
   "./index.html",
