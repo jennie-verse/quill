@@ -1,107 +1,88 @@
-const CACHE_PREFIX = "quill-";
-const CACHE_VERSION = "quill-v1";
-const CORE_ASSETS = [
-  "./",
-  "./index.html",
-  "./manifest.webmanifest",
-  "./icons/apple-touch-icon.png",
-  "./icons/icon-192.png",
-  "./icons/icon-512.png",
-  "./icons/icon-maskable-512.png"
+/* ==========================================================================
+   sw.js — 앱 셸 오프라인 캐시
+
+   이 파일을 고칠 때는 CACHE_NAME 의 버전도 반드시 함께 올립니다.
+   (webapp-standard.md 8장 / 프로젝트 지시문)
+   ========================================================================== */
+
+const CACHE_NAME = 'quill-shell-v1';
+
+const PRECACHE_URLS = [
+  './',
+  './index.html',
+  './manifest.webmanifest',
+  './assets/app.css',
+  './assets/fonts/lexend-400.woff2',
+  './assets/fonts/lexend-700.woff2',
+  './src/app.js',
+  './src/settings.js',
+  './src/recovery.js',
+  './src/files.js',
+  './src/find.js',
+  './src/editor.js',
+  './src/backup.js',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/icon-maskable-512.png',
+  './icons/apple-touch-icon.png',
+  './licenses/Lexend-OFL.txt'
 ];
 
-function extractHtmlAssets(html, baseUrl) {
-  return Array.from(html.matchAll(/(?:src|href)=["']([^"'#]+)["']/gi), (match) => {
-    return new URL(match[1], baseUrl);
-  }).filter((url) => url.origin === self.location.origin);
-}
+self.addEventListener('install', (event) => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    // 파일 하나가 없어도 설치가 통째로 실패하지 않도록 개별로 담습니다.
+    await Promise.all(PRECACHE_URLS.map(async (url) => {
+      try {
+        await cache.add(url);
+      } catch (error) {
+        // 선택 파일은 없어도 앱이 동작합니다.
+      }
+    }));
+    await self.skipWaiting();
+  })());
+});
 
-function extractCssAssets(css, baseUrl) {
-  return Array.from(css.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/gi), (match) => {
-    return new URL(match[1], baseUrl);
-  }).filter((url) => url.origin === self.location.origin && !url.protocol.startsWith("data"));
-}
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const names = await caches.keys();
+    await Promise.all(names.map((name) => (name === CACHE_NAME ? null : caches.delete(name))));
+    await self.clients.claim();
+  })());
+});
 
-async function cacheResponse(cache, url) {
-  const response = await fetch(url, { cache: "reload" });
-  if (!response.ok) throw new Error(`Could not precache ${url.pathname}`);
-  await cache.put(url, response.clone());
-  return response;
-}
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
 
-async function precacheAppShell() {
-  const cache = await caches.open(CACHE_VERSION);
-  const scopeUrl = new URL("./", self.registration.scope);
-  await cache.addAll(CORE_ASSETS.map((path) => new URL(path, scopeUrl)));
+  const url = new URL(request.url);
+  // 같은 출처만 다룹니다. Quill 은 외부로 요청을 보내지 않습니다.
+  if (url.origin !== self.location.origin) return;
 
-  const indexUrl = new URL("./index.html", scopeUrl);
-  const indexResponse = await cacheResponse(cache, indexUrl);
-  const htmlAssets = extractHtmlAssets(await indexResponse.text(), indexUrl);
-
-  await Promise.all(htmlAssets.map(async (assetUrl) => {
-    const response = await cacheResponse(cache, assetUrl);
-    if ((response.headers.get("content-type") || "").includes("text/css")) {
-      const cssAssets = extractCssAssets(await response.text(), assetUrl);
-      await Promise.all(cssAssets.map((cssAssetUrl) => cacheResponse(cache, cssAssetUrl)));
+  event.respondWith((async () => {
+    // 문서 요청은 네트워크를 먼저 시도해 새 버전을 빨리 받습니다.
+    if (request.mode === 'navigate') {
+      try {
+        const response = await fetch(request);
+        const cache = await caches.open(CACHE_NAME);
+        cache.put('./index.html', response.clone());
+        return response;
+      } catch (error) {
+        const cached = await caches.match('./index.html');
+        if (cached) return cached;
+        throw error;
+      }
     }
-  }));
-}
 
-self.addEventListener("install", (event) => {
-  event.waitUntil(precacheAppShell());
-});
+    // 나머지는 캐시 우선 — 오프라인에서 즉시 뜨는 것이 중요합니다.
+    const cached = await caches.match(request);
+    if (cached) return cached;
 
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches
-      .keys()
-      .then((keys) =>
-        Promise.all(
-          keys
-            .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_VERSION)
-            .map((key) => caches.delete(key))
-        )
-      )
-      .then(() => self.clients.claim())
-  );
-});
-
-self.addEventListener("message", (event) => {
-  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
-});
-
-self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET") return;
-  const requestUrl = new URL(event.request.url);
-  if (requestUrl.origin !== self.location.origin) return;
-
-  if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request)
-        .then(async (response) => {
-          if (response.ok) {
-            const cache = await caches.open(CACHE_VERSION);
-            await cache.put("./index.html", response.clone());
-          }
-          return response;
-        })
-        .catch(() => caches.match("./index.html").then((cached) => cached || caches.match("./")))
-    );
-    return;
-  }
-
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const network = fetch(event.request)
-        .then(async (response) => {
-          if (response.ok) {
-            const cache = await caches.open(CACHE_VERSION);
-            await cache.put(event.request, response.clone());
-          }
-          return response;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
-  );
+    const response = await fetch(request);
+    if (response && response.ok && response.type === 'basic') {
+      const cache = await caches.open(CACHE_NAME);
+      cache.put(request, response.clone());
+    }
+    return response;
+  })());
 });

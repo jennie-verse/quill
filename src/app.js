@@ -1,0 +1,795 @@
+/* ==========================================================================
+   app.js — 화면 조립, 이벤트, 상태
+
+   빌드 도구 없이 그대로 배포되는 ES module 입니다.
+   외부 CDN·패키지·분석 도구·로그인·서버를 쓰지 않습니다.
+   ========================================================================== */
+
+import {
+  loadSettings, saveSettings, isValidExtension,
+  INTERFACE_SIZES, EDITOR_SIZES, TAB_SIZES,
+  DEFAULT_INTERFACE_SIZE, DEFAULT_EDITOR_SIZE, SETTINGS_KEY
+} from './settings.js';
+
+import {
+  readDraft, writeDraft, clearDraft,
+  writeFallbackDraft, readFallbackDraft, clearFallbackDraft, newerDraft
+} from './recovery.js';
+
+import {
+  QUICK_EXTENSIONS, sanitizeFileName, splitName, joinName,
+  looksBinary, readFileAsText, downloadText, shareText, canShareFiles
+} from './files.js';
+
+import { findMatches, stepMatch, matchAtOrAfter, describeMatches } from './find.js';
+import { indent, outdent, newlineWithIndent, applyEdit, describeDocument } from './editor.js';
+import { buildBackup, checkBackupSize, parseBackup, backupFileName } from './backup.js';
+
+const DRAFT_DEBOUNCE_MS = 1200;
+
+const el = {};
+const state = {
+  settings: loadSettings(),
+  fileName: '',
+  text: '',
+  dirty: false,
+  composing: false,
+  draftTimer: 0,
+  toastTimer: 0,
+  find: { open: false, matches: [], index: -1 },
+  confirmResolve: null,
+  saveResolve: null
+};
+
+/* ── 유틸 ────────────────────────────────────────────────────────── */
+
+function id(name) { return document.getElementById(name); }
+
+function collect() {
+  [
+    'app-shell', 'editor-screen', 'settings-screen', 'editor-body', 'file-name-display',
+    'open-button', 'new-button', 'find-button', 'save-button', 'settings-open', 'settings-close',
+    'find-bar', 'find-input', 'find-count', 'find-previous', 'find-next', 'find-match-case', 'find-close',
+    'document-status', 'save-status', 'toast',
+    'interface-size-picker', 'interface-size-reset', 'editor-size-picker', 'editor-size-reset',
+    'tab-size-picker', 'wrap-toggle', 'spellcheck-toggle', 'autocorrect-toggle',
+    'quick-extensions', 'custom-extension', 'extension-error',
+    'export-backup', 'restore-backup', 'clear-recovery', 'clear-data', 'settings-message',
+    'save-dialog', 'save-form', 'save-name', 'save-extension', 'save-preview', 'save-error',
+    'save-cancel', 'save-confirm',
+    'confirm-dialog', 'confirm-message', 'confirm-cancel', 'confirm-accept',
+    'file-input', 'backup-input'
+  ].forEach((name) => { el[name] = id(name); });
+}
+
+function toast(message) {
+  el.toast.textContent = message;
+  el.toast.hidden = false;
+  if (state.toastTimer) window.clearTimeout(state.toastTimer);
+  state.toastTimer = window.setTimeout(() => { el.toast.hidden = true; }, 2600);
+}
+
+function setStatus(message, tone = '') {
+  el['save-status'].textContent = message;
+  if (tone) el['save-status'].dataset.tone = tone;
+  else delete el['save-status'].dataset.tone;
+}
+
+function displayName() {
+  return state.fileName || 'Untitled';
+}
+
+/* ── 확인 시트 ───────────────────────────────────────────────────── */
+
+function confirmAction({ title, message, acceptLabel, cancelLabel }) {
+  if (state.confirmResolve) return Promise.resolve(false);
+  el['confirm-dialog'].querySelector('#confirm-title').textContent = title;
+  el['confirm-message'].textContent = message;
+  el['confirm-accept'].textContent = acceptLabel;
+  el['confirm-cancel'].textContent = cancelLabel;
+  el['confirm-dialog'].showModal();
+  el['confirm-cancel'].focus();
+  return new Promise((resolve) => { state.confirmResolve = resolve; });
+}
+
+function settleConfirm(value) {
+  if (!state.confirmResolve) return;
+  const resolve = state.confirmResolve;
+  state.confirmResolve = null;
+  el['confirm-dialog'].close();
+  resolve(value);
+}
+
+async function guardUnsaved(actionLabel) {
+  if (!state.dirty) return true;
+  return confirmAction({
+    title: 'Changes not exported',
+    message: `This document has changes that were never sent to Files. ${actionLabel}`,
+    acceptLabel: 'Discard Changes',
+    cancelLabel: 'Keep Editing'
+  });
+}
+
+/* ── 초안 저장 ───────────────────────────────────────────────────── */
+
+function scheduleDraft() {
+  if (state.draftTimer) window.clearTimeout(state.draftTimer);
+  state.draftTimer = window.setTimeout(saveDraftNow, DRAFT_DEBOUNCE_MS);
+}
+
+async function saveDraftNow() {
+  if (state.draftTimer) {
+    window.clearTimeout(state.draftTimer);
+    state.draftTimer = 0;
+  }
+  try {
+    await writeDraft({ text: state.text, fileName: state.fileName });
+    writeFallbackDraft({ text: state.text, fileName: state.fileName });
+    setStatus('Draft saved on this device', 'ok');
+  } catch (error) {
+    // 초안 저장이 실패해도 편집은 계속할 수 있어야 합니다.
+    writeFallbackDraft({ text: state.text, fileName: state.fileName });
+    setStatus('Draft save failed', 'warn');
+  }
+}
+
+/* ── 렌더 ────────────────────────────────────────────────────────── */
+
+function renderDocument() {
+  el['document-status'].textContent = describeDocument(state.text);
+  el['file-name-display'].textContent = displayName();
+  el['file-name-display'].dataset.dirty = String(state.dirty);
+  el['file-name-display'].title = displayName();
+}
+
+function applyInterfaceSize() {
+  document.documentElement.style.setProperty('--ui-size', `${state.settings.interfaceSize}px`);
+  el['interface-size-picker'].querySelectorAll('button[data-size]').forEach((button) => {
+    button.setAttribute('aria-pressed', String(Number(button.dataset.size) === state.settings.interfaceSize));
+  });
+}
+
+function applyEditorSize() {
+  document.documentElement.style.setProperty('--editor-size', `${state.settings.editorSize}px`);
+  el['editor-size-picker'].querySelectorAll('button[data-size]').forEach((button) => {
+    button.setAttribute('aria-pressed', String(Number(button.dataset.size) === state.settings.editorSize));
+  });
+}
+
+function applyEditorPreferences() {
+  const editor = el['editor-body'];
+  editor.dataset.wrap = String(state.settings.wrap);
+  editor.setAttribute('wrap', state.settings.wrap ? 'soft' : 'off');
+  editor.spellcheck = state.settings.spellcheck;
+  editor.setAttribute('autocorrect', state.settings.autocorrect ? 'on' : 'off');
+  editor.setAttribute('autocapitalize', state.settings.autocorrect ? 'sentences' : 'off');
+  editor.style.tabSize = String(state.settings.tabSize);
+
+  el['wrap-toggle'].checked = state.settings.wrap;
+  el['spellcheck-toggle'].checked = state.settings.spellcheck;
+  el['autocorrect-toggle'].checked = state.settings.autocorrect;
+
+  el['tab-size-picker'].querySelectorAll('button[data-tab]').forEach((button) => {
+    button.setAttribute('aria-pressed', String(Number(button.dataset.tab) === state.settings.tabSize));
+  });
+}
+
+function renderExtensions() {
+  el['quick-extensions'].replaceChildren();
+  QUICK_EXTENSIONS.forEach((extension) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.extension = extension;
+    button.textContent = extension;
+    button.setAttribute('aria-pressed', String(extension === state.settings.defaultExtension));
+    el['quick-extensions'].append(button);
+  });
+  if (document.activeElement !== el['custom-extension']) {
+    el['custom-extension'].value = state.settings.defaultExtension;
+  }
+}
+
+function renderSettings() {
+  applyInterfaceSize();
+  applyEditorSize();
+  applyEditorPreferences();
+  renderExtensions();
+}
+
+function persistSettings() {
+  if (!saveSettings(state.settings)) {
+    el['settings-message'].textContent = 'Settings could not be saved on this device.';
+    delete el['settings-message'].dataset.tone;
+  }
+}
+
+/* ── 문서 조작 ───────────────────────────────────────────────────── */
+
+function setDocument(text, fileName, { dirty = false } = {}) {
+  state.text = text;
+  state.fileName = fileName;
+  state.dirty = dirty;
+  el['editor-body'].value = text;
+  renderDocument();
+  refreshFind();
+}
+
+function onEditorInput() {
+  if (state.composing) return;
+  state.text = el['editor-body'].value;
+  state.dirty = true;
+  renderDocument();
+  refreshFind();
+  scheduleDraft();
+}
+
+/* ── Find ────────────────────────────────────────────────────────── */
+
+function refreshFind() {
+  if (!state.find.open) return;
+  const query = el['find-input'].value;
+  state.find.matches = findMatches(state.text, query, el['find-match-case'].checked);
+  if (state.find.index >= state.find.matches.length) state.find.index = -1;
+  el['find-count'].textContent = describeMatches(state.find.matches, state.find.index);
+  const empty = state.find.matches.length === 0;
+  el['find-previous'].disabled = empty;
+  el['find-next'].disabled = empty;
+}
+
+function moveFind(direction) {
+  if (state.find.matches.length === 0) return;
+  const next = state.find.index < 0
+    ? matchAtOrAfter(state.find.matches, el['editor-body'].selectionStart)
+    : stepMatch(state.find.matches, state.find.index, direction);
+  state.find.index = next;
+  const match = state.find.matches[next];
+  el['editor-body'].focus();
+  el['editor-body'].setSelectionRange(match.start, match.end);
+  el['find-count'].textContent = describeMatches(state.find.matches, next);
+}
+
+function openFind() {
+  state.find.open = true;
+  el['find-bar'].hidden = false;
+  el['find-button'].setAttribute('aria-expanded', 'true');
+  refreshFind();
+  el['find-input'].focus();
+  el['find-input'].select();
+}
+
+function closeFind() {
+  state.find.open = false;
+  state.find.index = -1;
+  state.find.matches = [];
+  el['find-bar'].hidden = true;
+  el['find-button'].setAttribute('aria-expanded', 'false');
+  el['editor-body'].focus();
+}
+
+/* ── 열기 ────────────────────────────────────────────────────────── */
+
+async function openFile(file) {
+  let text;
+  try {
+    text = await readFileAsText(file);
+  } catch (error) {
+    toast('The file could not be read.');
+    return;
+  }
+
+  if (looksBinary(text)) {
+    const proceed = await confirmAction({
+      title: 'This appears to be a binary file.',
+      message: 'Opening it may show unreadable characters, and saving could damage the original.',
+      acceptLabel: 'Open Anyway',
+      cancelLabel: 'Cancel'
+    });
+    if (!proceed) return;
+  }
+
+  setDocument(text, file.name, { dirty: false });
+  await saveDraftNow();
+  setStatus('File opened.', 'ok');
+  toast('File opened.');
+}
+
+/* ── 저장 ────────────────────────────────────────────────────────── */
+
+function updateSavePreview() {
+  const base = el['save-name'].value;
+  const extension = el['save-extension'].value;
+  const safeBase = sanitizeFileName(base, '');
+  if (safeBase === null) {
+    el['save-error'].textContent = 'Remove / \\ : * ? " < > | from the file name.';
+    el['save-preview'].textContent = '—';
+    el['save-confirm'].disabled = true;
+    return null;
+  }
+  if (!safeBase) {
+    el['save-error'].textContent = '';
+    el['save-preview'].textContent = '—';
+    el['save-confirm'].disabled = true;
+    return null;
+  }
+  if (extension && !isValidExtension(extension.startsWith('.') ? extension : `.${extension}`)) {
+    el['save-error'].textContent = 'Use an extension like .txt or .md';
+    el['save-preview'].textContent = '—';
+    el['save-confirm'].disabled = true;
+    return null;
+  }
+
+  const full = joinName(safeBase, extension);
+  el['save-error'].textContent = '';
+  el['save-preview'].textContent = full;
+  el['save-confirm'].disabled = false;
+  return full;
+}
+
+function askFileName() {
+  const current = splitName(state.fileName);
+  el['save-name'].value = current.base || 'untitled';
+  el['save-extension'].value = current.extension || state.settings.defaultExtension;
+  el['save-error'].textContent = '';
+  updateSavePreview();
+  el['save-dialog'].showModal();
+  el['save-name'].focus();
+  el['save-name'].select();
+  return new Promise((resolve) => { state.saveResolve = resolve; });
+}
+
+function settleSave(value) {
+  if (!state.saveResolve) return;
+  const resolve = state.saveResolve;
+  state.saveResolve = null;
+  el['save-dialog'].close();
+  resolve(value);
+}
+
+async function saveCopy() {
+  const fileName = await askFileName();
+  if (!fileName) return;
+
+  // 공유 시트가 있으면 그쪽이 iOS에서 훨씬 편합니다. 없으면 다운로드로 대체합니다.
+  if (canShareFiles()) {
+    try {
+      const shared = await shareText(state.text, fileName);
+      if (!shared) {
+        setStatus('Export cancelled.', 'warn');
+        return;
+      }
+      state.fileName = fileName;
+      state.dirty = false;
+      renderDocument();
+      await saveDraftNow();
+      setStatus('File export requested.', 'ok');
+      toast('Sent to Files.');
+      return;
+    } catch (error) {
+      // 공유 실패 시 다운로드로 계속 진행합니다.
+    }
+  }
+
+  try {
+    downloadText(state.text, fileName);
+    state.fileName = fileName;
+    state.dirty = false;
+    renderDocument();
+    await saveDraftNow();
+    setStatus('File export requested.', 'ok');
+    toast('Download started.');
+  } catch (error) {
+    setStatus('File sharing failed', 'error');
+    toast('File sharing failed');
+  }
+}
+
+/* ── 백업 ────────────────────────────────────────────────────────── */
+
+async function exportBackup() {
+  try {
+    const payload = buildBackup({
+      draft: { text: state.text, fileName: state.fileName, savedAt: new Date().toISOString() },
+      settings: state.settings
+    });
+    checkBackupSize(payload);
+    const name = backupFileName();
+    if (canShareFiles()) {
+      try {
+        const shared = await shareText(payload, name);
+        if (shared) {
+          el['settings-message'].textContent = 'Backup exported.';
+          el['settings-message'].dataset.tone = 'ok';
+          return;
+        }
+      } catch (error) {
+        // 다운로드로 대체합니다.
+      }
+    }
+    downloadText(payload, name);
+    el['settings-message'].textContent = 'Backup exported.';
+    el['settings-message'].dataset.tone = 'ok';
+  } catch (error) {
+    el['settings-message'].textContent = error.message || 'Backup failed.';
+    delete el['settings-message'].dataset.tone;
+  }
+}
+
+async function restoreBackupFile(file) {
+  let backup;
+  try {
+    backup = parseBackup(await readFileAsText(file));
+  } catch (error) {
+    el['settings-message'].textContent = error.message || 'Invalid Quill backup.';
+    delete el['settings-message'].dataset.tone;
+    return;
+  }
+
+  const accepted = await confirmAction({
+    title: 'Restore Backup',
+    message: 'This replaces the current draft and settings on this device.',
+    acceptLabel: 'Restore',
+    cancelLabel: 'Cancel'
+  });
+  if (!accepted) return;
+
+  state.settings = backup.settings;
+  persistSettings();
+  renderSettings();
+
+  if (backup.draft) {
+    setDocument(backup.draft.text, backup.draft.fileName, { dirty: true });
+    await saveDraftNow();
+  }
+
+  el['settings-message'].textContent = 'Backup restored.';
+  el['settings-message'].dataset.tone = 'ok';
+  toast('Backup restored.');
+}
+
+/* ── 초기화 ──────────────────────────────────────────────────────── */
+
+async function clearRecovery() {
+  const accepted = await confirmAction({
+    title: 'Clear recovery data',
+    message: 'The saved draft on this device is deleted. The text on screen stays until you leave.',
+    acceptLabel: 'Clear',
+    cancelLabel: 'Cancel'
+  });
+  if (!accepted) return;
+  try {
+    await clearDraft();
+    clearFallbackDraft();
+    el['settings-message'].textContent = 'Recovery data cleared.';
+    el['settings-message'].dataset.tone = 'ok';
+  } catch (error) {
+    el['settings-message'].textContent = 'Recovery data could not be cleared.';
+    delete el['settings-message'].dataset.tone;
+  }
+}
+
+async function clearAllData() {
+  const accepted = await confirmAction({
+    title: 'Clear Data',
+    message: 'The draft, settings, and text on screen are all reset. Files you already exported are not touched.',
+    acceptLabel: 'Clear Data',
+    cancelLabel: 'Cancel'
+  });
+  if (!accepted) return;
+  try {
+    await clearDraft();
+  } catch (error) {
+    // 이미 없을 수도 있습니다.
+  }
+  clearFallbackDraft();
+  try { localStorage.removeItem(SETTINGS_KEY); } catch (error) { /* 무시 */ }
+  state.settings = loadSettings();
+  renderSettings();
+  setDocument('', '', { dirty: false });
+  setStatus('');
+  el['settings-message'].textContent = 'All data cleared.';
+  el['settings-message'].dataset.tone = 'ok';
+}
+
+/* ── 화면 전환 ───────────────────────────────────────────────────── */
+
+function openSettings() {
+  el['editor-screen'].hidden = true;
+  el['settings-screen'].hidden = false;
+  el['settings-message'].textContent = '';
+  renderSettings();
+  el['settings-close'].focus();
+}
+
+function closeSettings() {
+  el['settings-screen'].hidden = true;
+  el['editor-screen'].hidden = false;
+  el['editor-body'].focus();
+}
+
+/* ── 이벤트 ──────────────────────────────────────────────────────── */
+
+function bind() {
+  const editor = el['editor-body'];
+
+  editor.addEventListener('input', onEditorInput);
+  editor.addEventListener('compositionstart', () => { state.composing = true; });
+  editor.addEventListener('compositionend', () => {
+    state.composing = false;
+    onEditorInput();
+  });
+
+  editor.addEventListener('keydown', (event) => {
+    // 한글 조합 중에는 키를 가로채지 않습니다.
+    if (state.composing || event.isComposing) return;
+
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      const { selectionStart, selectionEnd, value } = editor;
+      const result = event.shiftKey
+        ? outdent(value, selectionStart, selectionEnd, state.settings.tabSize)
+        : indent(value, selectionStart, selectionEnd, state.settings.tabSize);
+      applyEdit(editor, result);
+      onEditorInput();
+      return;
+    }
+
+    if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey) {
+      const { selectionStart, selectionEnd, value } = editor;
+      const result = newlineWithIndent(value, selectionStart, selectionEnd);
+      // 들여쓰기가 없으면 브라우저 기본 동작이 실행 취소 이력에 더 잘 남습니다.
+      if (result.text.length !== value.length + 1) {
+        event.preventDefault();
+        applyEdit(editor, result);
+        onEditorInput();
+      }
+      return;
+    }
+
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
+      event.preventDefault();
+      openFind();
+      return;
+    }
+
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+      event.preventDefault();
+      saveCopy();
+      return;
+    }
+
+    if (event.key === 'Escape' && state.find.open) {
+      event.preventDefault();
+      closeFind();
+    }
+  });
+
+  el['open-button'].addEventListener('click', async () => {
+    if (!(await guardUnsaved('Open another file anyway?'))) return;
+    el['file-input'].value = '';
+    el['file-input'].click();
+  });
+
+  el['file-input'].addEventListener('change', () => {
+    const file = el['file-input'].files && el['file-input'].files[0];
+    if (file) openFile(file);
+  });
+
+  el['new-button'].addEventListener('click', async () => {
+    if (!(await guardUnsaved('Start a new file anyway?'))) return;
+    setDocument('', '', { dirty: false });
+    await saveDraftNow();
+    setStatus('New file ready.', 'ok');
+    el['editor-body'].focus();
+  });
+
+  el['save-button'].addEventListener('click', saveCopy);
+
+  el['find-button'].addEventListener('click', () => {
+    if (state.find.open) closeFind();
+    else openFind();
+  });
+  el['find-close'].addEventListener('click', closeFind);
+  el['find-input'].addEventListener('input', () => {
+    state.find.index = -1;
+    refreshFind();
+  });
+  el['find-input'].addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      moveFind(event.shiftKey ? -1 : 1);
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeFind();
+    }
+  });
+  el['find-match-case'].addEventListener('change', () => {
+    state.find.index = -1;
+    refreshFind();
+  });
+  el['find-next'].addEventListener('click', () => moveFind(1));
+  el['find-previous'].addEventListener('click', () => moveFind(-1));
+
+  el['settings-open'].addEventListener('click', openSettings);
+  el['settings-close'].addEventListener('click', closeSettings);
+
+  el['interface-size-picker'].addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-size]');
+    if (!button) return;
+    const size = Number(button.dataset.size);
+    if (!INTERFACE_SIZES.includes(size)) return;
+    state.settings.interfaceSize = size;
+    persistSettings();
+    applyInterfaceSize();
+  });
+  el['interface-size-reset'].addEventListener('click', () => {
+    state.settings.interfaceSize = DEFAULT_INTERFACE_SIZE;
+    persistSettings();
+    applyInterfaceSize();
+  });
+
+  el['editor-size-picker'].addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-size]');
+    if (!button) return;
+    const size = Number(button.dataset.size);
+    if (!EDITOR_SIZES.includes(size)) return;
+    state.settings.editorSize = size;
+    persistSettings();
+    applyEditorSize();
+  });
+  el['editor-size-reset'].addEventListener('click', () => {
+    state.settings.editorSize = DEFAULT_EDITOR_SIZE;
+    persistSettings();
+    applyEditorSize();
+  });
+
+  el['tab-size-picker'].addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-tab]');
+    if (!button) return;
+    const size = Number(button.dataset.tab);
+    if (!TAB_SIZES.includes(size)) return;
+    state.settings.tabSize = size;
+    persistSettings();
+    applyEditorPreferences();
+  });
+
+  el['wrap-toggle'].addEventListener('change', () => {
+    state.settings.wrap = el['wrap-toggle'].checked;
+    persistSettings();
+    applyEditorPreferences();
+  });
+  el['spellcheck-toggle'].addEventListener('change', () => {
+    state.settings.spellcheck = el['spellcheck-toggle'].checked;
+    persistSettings();
+    applyEditorPreferences();
+  });
+  el['autocorrect-toggle'].addEventListener('change', () => {
+    state.settings.autocorrect = el['autocorrect-toggle'].checked;
+    persistSettings();
+    applyEditorPreferences();
+  });
+
+  el['quick-extensions'].addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-extension]');
+    if (!button) return;
+    state.settings.defaultExtension = button.dataset.extension;
+    persistSettings();
+    renderExtensions();
+    el['extension-error'].textContent = '';
+  });
+
+  el['custom-extension'].addEventListener('change', () => {
+    const raw = el['custom-extension'].value.trim();
+    const value = raw.startsWith('.') ? raw : `.${raw}`;
+    if (!isValidExtension(value)) {
+      el['extension-error'].textContent = 'Use letters and numbers, like .txt or .md';
+      return;
+    }
+    state.settings.defaultExtension = value;
+    persistSettings();
+    renderExtensions();
+    el['extension-error'].textContent = '';
+  });
+
+  el['export-backup'].addEventListener('click', exportBackup);
+  el['restore-backup'].addEventListener('click', () => {
+    el['backup-input'].value = '';
+    el['backup-input'].click();
+  });
+  el['backup-input'].addEventListener('change', () => {
+    const file = el['backup-input'].files && el['backup-input'].files[0];
+    if (file) restoreBackupFile(file);
+  });
+  el['clear-recovery'].addEventListener('click', clearRecovery);
+  el['clear-data'].addEventListener('click', clearAllData);
+
+  // 저장 시트
+  el['save-name'].addEventListener('input', updateSavePreview);
+  el['save-extension'].addEventListener('input', updateSavePreview);
+  el['save-cancel'].addEventListener('click', () => settleSave(''));
+  el['save-form'].addEventListener('submit', (event) => {
+    event.preventDefault();
+    const full = updateSavePreview();
+    if (full) settleSave(full);
+  });
+  el['save-dialog'].addEventListener('cancel', (event) => {
+    event.preventDefault();
+    settleSave('');
+  });
+
+  // 확인 시트
+  el['confirm-cancel'].addEventListener('click', () => settleConfirm(false));
+  el['confirm-accept'].addEventListener('click', () => settleConfirm(true));
+  el['confirm-dialog'].addEventListener('cancel', (event) => {
+    event.preventDefault();
+    settleConfirm(false);
+  });
+
+  // 앱을 떠나기 전에 초안을 한 번 더 적어 둡니다.
+  window.addEventListener('pagehide', () => {
+    writeFallbackDraft({ text: state.text, fileName: state.fileName });
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      writeFallbackDraft({ text: state.text, fileName: state.fileName });
+      saveDraftNow();
+    }
+  });
+  window.addEventListener('beforeunload', (event) => {
+    if (!state.dirty) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
+}
+
+/* ── Service Worker ──────────────────────────────────────────────── */
+
+function registerServiceWorker() {
+  // 안전하지 않은 컨텍스트나 비공개 브라우징에서는 속성은 있는데 값이 없을 수 있습니다.
+  const container = navigator.serviceWorker;
+  if (!container || typeof container.register !== 'function') return;
+  window.addEventListener('load', () => {
+    container.register('./sw.js').then((registration) => {
+      registration.addEventListener('updatefound', () => {
+        const installing = registration.installing;
+        if (!installing) return;
+        installing.addEventListener('statechange', () => {
+          if (installing.state === 'installed' && container.controller) {
+            toast('Update available — close and reopen Quill.');
+          }
+        });
+      });
+    }).catch(() => {
+      // 등록에 실패해도 앱은 그대로 쓸 수 있습니다.
+    });
+  });
+}
+
+/* ── 시작 ────────────────────────────────────────────────────────── */
+
+async function restoreDraft() {
+  let stored = null;
+  try {
+    stored = await readDraft();
+  } catch (error) {
+    setStatus('Recovery data unavailable', 'warn');
+  }
+  const draft = newerDraft(stored, readFallbackDraft());
+  if (!draft || (!draft.text && !draft.fileName)) return;
+  setDocument(draft.text, draft.fileName, { dirty: true });
+  setStatus('Draft restored', 'ok');
+  toast('Draft restored — recovered from this device.');
+}
+
+async function init() {
+  collect();
+  renderSettings();
+  bind();
+  setDocument('', '', { dirty: false });
+  registerServiceWorker();
+  await restoreDraft();
+}
+
+init().catch(() => {
+  setStatus('Quill could not start cleanly. Your text is not saved yet.', 'error');
+});
