@@ -5,7 +5,7 @@
    (webapp-standard.md 8장 / 프로젝트 지시문)
    ========================================================================== */
 
-const CACHE_NAME = 'quill-shell-v1';
+const CACHE_NAME = 'quill-shell-v2';
 
 const PRECACHE_URLS = [
   './',
@@ -46,7 +46,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const names = await caches.keys();
-    await Promise.all(names.map((name) => (name === CACHE_NAME ? null : caches.delete(name))));
+    await Promise.all(names.map((name) => (name.startsWith('quill-') && name !== CACHE_NAME ? caches.delete(name) : null)));
     await self.clients.claim();
   })());
 });
