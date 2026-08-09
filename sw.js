@@ -5,7 +5,7 @@
    (webapp-standard.md 8장 / 프로젝트 지시문)
    ========================================================================== */
 
-const CACHE_NAME = 'quill-shell-v2';
+const CACHE_NAME = 'quill-shell-v3';
 
 const PRECACHE_URLS = [
   './',
