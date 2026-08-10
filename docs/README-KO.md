@@ -27,7 +27,9 @@ quill/
 │  └─ fonts/                  Lexend 400·700 (오프라인 동봉)
 ├─ src/
 │  ├─ app.js                  화면 조립, 이벤트, 상태 (여기가 시작점)
+│  ├─ version.js              APP_BUILD — sw.js의 VERSION과 반드시 같아야 함
 │  ├─ settings.js             설정 저장·복원, 글자 크기 단계 정의
+│  ├─ sync.js                 webapp-data 설정 동기화 (초안·글은 제외)
 │  ├─ recovery.js             편집 중이던 초안 1건 (IndexedDB)
 │  ├─ files.js                열기·내보내기·공유, 파일명·확장자 처리
 │  ├─ editor.js               들여쓰기, 줄바꿈 승계, 상태 요약
@@ -111,3 +113,23 @@ node tests/dom.test.mjs       # 화면 배선과 초기화
 - 사용자 텍스트를 HTML로 실행하지 않음 (`innerHTML`·`eval` 미사용)
 - 외부로 요청을 보내지 않음
 - `sw.js`를 고치면 `CACHE_NAME` 버전도 함께 올릴 것
+
+
+## 동기화 (2026-08-10 추가)
+
+`webapp-data`(비공개 저장소)에 **설정 7개만** 올립니다. 켜는 법은 [사용 안내](USER-GUIDE-KO.md)를 확인하세요.
+
+| 파일 | 무엇 |
+|---|---|
+| `quill/settings.<기기>.json` | UI·에디터 글자 크기, 들여쓰기, 줄바꿈, 맞춤법, 자동 수정, 기본 확장자 |
+
+이벤트(B층)와 백업(C층)은 **일부러 넣지 않았습니다.** 설정은 "한 일"이 아니라 Atlas·Trace에 남길 것이 없고, 백업은 기존 `Export Backup`이 그대로 담당합니다.
+
+### 고칠 때 지켜야 하는 것 네 가지
+
+1. **`Sync.markSettingsChanged()`는 `persistSettings()` 안에서만 부릅니다.** 앱이 켜질 때나 기본값을 그릴 때 부르면, 새로 깐 기기의 기본값이 최신 시각으로 올라가 다른 기기에서 맞춰 둔 설정을 덮습니다. 검사가 호출이 딱 하나인지 확인합니다.
+2. **`src/sync.js`의 `SETTING_KEYS` 목록으로 필드를 골라 담습니다.** 넘어온 객체를 그대로 올리면 실수로 초안이 섞였을 때 그것이 저장소에 올라갑니다.
+3. **`sw.js`의 `VERSION`과 `src/version.js`의 `APP_BUILD`는 항상 같은 값이어야 합니다.**
+4. **동기화 모듈은 동적 `import()`로 부릅니다.** 정적으로 물리면 `sync.js` 하나를 못 받을 때 앱 전체가 빈 화면이 됩니다.
+
+네 가지 모두 `Plan/webapp-data_plan/tests/quill-sync-test.mjs`가 자동으로 확인합니다.

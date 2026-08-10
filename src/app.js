@@ -6,7 +6,7 @@
    ========================================================================== */
 
 import {
-  loadSettings, saveSettings, isValidExtension,
+  loadSettings, saveSettings, normalizeSettings, isValidExtension,
   INTERFACE_SIZES, EDITOR_SIZES, TAB_SIZES,
   DEFAULT_INTERFACE_SIZE, DEFAULT_EDITOR_SIZE, SETTINGS_KEY
 } from './settings.js';
@@ -24,6 +24,14 @@ import {
 import { findMatches, stepMatch, matchAtOrAfter, describeMatches } from './find.js';
 import { indent, outdent, newlineWithIndent, applyEdit, describeDocument } from './editor.js';
 import { buildBackup, checkBackupSize, parseBackup, backupFileName } from './backup.js';
+import { APP_BUILD } from './version.js';
+
+/* 동기화 모듈은 필요할 때만 부릅니다. 이 파일 하나를 못 받아도 Quill 은
+   그대로 떠야 하므로, 정적 import 로 물리지 않고 실패를 삼킵니다. */
+let Sync = null;
+const syncReady = import('./sync.js')
+  .then((module) => { Sync = module; return true; })
+  .catch(() => false);
 
 const DRAFT_DEBOUNCE_MS = 1200;
 
@@ -58,7 +66,9 @@ function collect() {
     'save-dialog', 'save-form', 'save-name', 'save-extension', 'save-preview', 'save-error',
     'save-cancel', 'save-confirm',
     'confirm-dialog', 'confirm-message', 'confirm-cancel', 'confirm-accept',
-    'file-input', 'backup-input'
+    'file-input', 'backup-input',
+    'sync-status', 'sync-device-name', 'sync-token', 'sync-save-token', 'sync-clear-token',
+    'sync-toggle', 'sync-now', 'sync-message', 'app-version'
   ].forEach((name) => { el[name] = id(name); });
 }
 
@@ -200,7 +210,27 @@ function persistSettings() {
   if (!saveSettings(state.settings)) {
     el['settings-message'].textContent = 'Settings could not be saved on this device.';
     delete el['settings-message'].dataset.tone;
+    return;
   }
+  /* 설정이 바뀐 시각은 **여기서만** 찍습니다. 이 함수는 사용자가 실제로 값을
+     바꿨을 때만 불립니다. 앱이 켜질 때 기본값을 최신으로 올려 다른 기기에서
+     맞춰 둔 설정을 덮는 사고를 막는 장치입니다. */
+  syncReady.then((ok) => {
+    if (!ok) return;
+    Sync.markSettingsChanged();
+    schedulePush();
+  });
+}
+
+let pushTimer = null;
+
+/** 공용 모듈과 같은 4초 디바운스. 슬라이더를 연달아 만질 때 요청이 쌓이지 않게 합니다. */
+function schedulePush() {
+  if (!Sync || !Sync.isReady()) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => {
+    Sync.pushSettings(state.settings).catch(() => { /* 다음 변경 때 다시 시도합니다 */ });
+  }, 4000);
 }
 
 /* ── 문서 조작 ───────────────────────────────────────────────────── */
@@ -610,6 +640,7 @@ function bind() {
   el['find-next'].addEventListener('click', () => moveFind(1));
   el['find-previous'].addEventListener('click', () => moveFind(-1));
 
+  bindSync();
   el['settings-open'].addEventListener('click', openSettings);
   el['settings-close'].addEventListener('click', closeSettings);
 
@@ -788,6 +819,98 @@ async function init() {
   setDocument('', '', { dirty: false });
   registerServiceWorker();
   await restoreDraft();
+
+  el['app-version'].textContent = `Quill · App version ${APP_BUILD}`;
+  if (await syncReady) {
+    renderSyncStatus();
+    // 동기화가 꺼져 있으면 요청이 나가지 않습니다. 실패해도 앱은 그대로 씁니다.
+    pullSettingsNow().catch(() => {});
+  } else {
+    el['sync-status'].textContent = 'Unavailable — the shared sync module could not be loaded.';
+  }
+}
+
+/* ── Sync 화면 ───────────────────────────────────────────────────── */
+
+function renderSyncStatus(message) {
+  if (!Sync) return;
+  el['sync-toggle'].textContent = Sync.isEnabled() ? 'Turn sync off' : 'Turn sync on';
+  el['sync-toggle'].setAttribute('aria-pressed', String(Sync.isEnabled()));
+  el['sync-device-name'].disabled = Boolean(Sync.getContextId());
+  if (Sync.getContextLabel()) el['sync-device-name'].value = Sync.getContextLabel();
+  el['sync-token'].placeholder = Sync.tokenHint() || 'github_pat_…';
+  el['sync-now'].disabled = !Sync.isReady();
+
+  if (message !== undefined) { el['sync-message'].textContent = message; return; }
+  el['sync-message'].textContent = '';
+  if (!Sync.isEnabled()) {
+    el['sync-status'].textContent = 'Off — everything stays on this device.';
+    return;
+  }
+  const last = Sync.getLastSyncAt();
+  const ago = last ? `${Math.max(0, Math.round((Date.now() - last) / 60000))} min ago` : 'never';
+  el['sync-status'].textContent = `On · device ${Sync.getContextId() || '—'} · last sync ${ago}`;
+}
+
+async function pullSettingsNow() {
+  if (!Sync || !Sync.isReady()) return;
+  const incoming = await Sync.pullSettings();
+  if (!incoming) return;
+  // 받은 쪽이 더 최신일 때만 null 이 아닙니다. 모르는 값은 기본값으로 떨어집니다.
+  state.settings = normalizeSettings(incoming);
+  saveSettings(state.settings);
+  renderSettings();
+  toast('Settings updated from another device.');
+}
+
+async function syncNow() {
+  if (!Sync || !Sync.isReady()) return;
+  renderSyncStatus('Syncing…');
+  try {
+    await pullSettingsNow();
+    await Sync.pushSettings(state.settings);
+    renderSyncStatus();
+  } catch (error) {
+    renderSyncStatus(Sync.describeError(error));
+  }
+}
+
+async function toggleSync() {
+  if (!Sync) return;
+  if (Sync.isEnabled()) { Sync.setEnabled(false); renderSyncStatus(); return; }
+  if (!Sync.getToken()) { renderSyncStatus('Save an access token first.'); return; }
+  if (!Sync.getContextId()) {
+    const typed = el['sync-device-name'].value.trim();
+    if (!/[a-z0-9]/i.test(typed)) {
+      renderSyncStatus('Enter a device name using English letters or numbers.');
+      el['sync-device-name'].focus();
+      return;
+    }
+    // ID 는 여기서 한 번 만들어지고 파일 이름으로 굳습니다.
+    try { await Sync.ensureContext(typed); }
+    catch (error) { renderSyncStatus(Sync.describeError(error)); return; }
+    Sync.setContextLabel(typed);
+  }
+  Sync.setEnabled(true);
+  renderSyncStatus();
+  await syncNow();
+}
+
+function bindSync() {
+  el['sync-save-token'].addEventListener('click', () => {
+    if (!Sync) return;
+    if (!Sync.saveToken(el['sync-token'].value)) { renderSyncStatus('Enter a token first.'); return; }
+    el['sync-token'].value = '';
+    renderSyncStatus('Token saved.');
+  });
+  el['sync-clear-token'].addEventListener('click', () => {
+    if (!Sync) return;
+    Sync.clearToken();
+    Sync.setEnabled(false);
+    renderSyncStatus('Token cleared.');
+  });
+  el['sync-toggle'].addEventListener('click', () => { void toggleSync(); });
+  el['sync-now'].addEventListener('click', () => { void syncNow(); });
 }
 
 init().catch(() => {
