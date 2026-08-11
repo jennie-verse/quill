@@ -1,17 +1,14 @@
 /* jsdom 으로 앱을 실제로 띄워 초기화 오류와 화면 배선을 확인합니다.
-   실행: npm install jsdom 후 `node tests/dom.test.mjs`
+   실행: `npm ci && npm test`
    jsdom 은 Safari 가 아니므로 최종 확인은 실기기에서 해야 합니다. */
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { createRequire } from 'node:module';
+import { JSDOM } from 'jsdom';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
-const require = createRequire(resolve(process.env.JSDOM_BASE || '/tmp', 'noop.js'));
-const { JSDOM } = require('jsdom');
-
 let pass = 0;
 let fail = 0;
 const t = (name, condition, detail = '') => {

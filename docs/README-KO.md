@@ -38,6 +38,8 @@ quill/
 ├─ icons/                     앱 아이콘 (이전 버전에서 그대로 가져옴)
 ├─ licenses/Lexend-OFL.txt    글꼴 라이선스
 ├─ tests/                     Node.js 테스트 (배포에는 영향 없음)
+├─ package.json               재현 가능한 테스트 명령과 고정된 jsdom 의존성
+├─ package-lock.json          npm ci용 lockfile
 └─ docs/
    ├─ README-KO.md            이 문서
    ├─ USER-GUIDE-KO.md        사용 안내
@@ -94,12 +96,11 @@ python3 -m http.server 8000
 # 브라우저에서 http://localhost:8000/ 을 엽니다
 ```
 
-테스트는 Node.js 18 이상에서 실행합니다.
+테스트는 Node.js 22에서 실행합니다.
 
 ```sh
-node tests/unit.test.mjs      # 순수 함수 (설치 불필요)
-npm install jsdom             # 아래 테스트에만 필요
-node tests/dom.test.mjs       # 화면 배선과 초기화
+npm ci
+npm test                      # 단위 51건 + DOM 22건 + sync contract
 ```
 
 `tests/` 폴더는 배포되어도 앱 동작에 영향을 주지 않습니다. 빼고 올려도 됩니다.
@@ -132,4 +133,4 @@ node tests/dom.test.mjs       # 화면 배선과 초기화
 3. **`sw.js`의 `VERSION`과 `src/version.js`의 `APP_BUILD`는 항상 같은 값이어야 합니다.**
 4. **동기화 모듈은 동적 `import()`로 부릅니다.** 정적으로 물리면 `sync.js` 하나를 못 받을 때 앱 전체가 빈 화면이 됩니다.
 
-네 가지 모두 `Plan/webapp-data_plan/tests/quill-sync-test.mjs`가 자동으로 확인합니다.
+현재 저장소의 `tests/sync-contract.test.mjs`가 네 가지 핵심 contract를 확인합니다. `npm ci && npm test`로 재실행합니다.

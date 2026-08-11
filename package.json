@@ -1,0 +1,12 @@
+{
+  "name": "quill-webapp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/unit.test.mjs && node tests/dom.test.mjs && node --test tests/sync-contract.test.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
+  }
+}

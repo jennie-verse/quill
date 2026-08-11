@@ -1,7 +1,11 @@
 # Quill 검토 결과
 
-대상: 빌드 없는 정적 앱으로 재작성한 Quill (`Deliverable/quill-new/`)
+대상: 현재 authoritative source인 `WebApp/Published/quill/`
 기준: `webapp-standard.md` 10장, 프로젝트 지시문 검토 기준
+
+## 2026-08-10 현재 재실행 결과
+
+`npm ci && npm test`로 단위 51건, DOM 22건, sync contract 5건을 재실행해 **78건 통과, 0건 실패**를 확인했습니다. `jsdom`은 `26.1.0`으로 고정했고 `package-lock.json`과 GitHub Actions test workflow를 저장소가 직접 소유합니다. 아래의 133건 기록은 당시 외부 harness 결과이며 현재 결과와 분리합니다.
 
 ---
 
@@ -22,8 +26,8 @@
 ### 자동 테스트
 
 ```sh
-node tests/unit.test.mjs      # 51 통과 / 0 실패
-node tests/dom.test.mjs       # 22 통과 / 0 실패  (jsdom 필요)
+npm ci
+npm test                      # 단위 51 + 화면 22 + sync contract
 ```
 
 **단위 테스트 51건** — 들여쓰기·내어쓰기·줄바꿈 승계, 검색(대소문자·순환·한글·정규식 문자), 파일명 검증, 확장자 분리·결합, 바이너리 판정, 설정 정규화, 백업 형식 검사와 왕복.
@@ -148,11 +152,11 @@ jsdom은 Safari가 아니고, 파일 선택·공유 시트·IndexedDB·키보드
 
 | 스크립트 | 결과 |
 |---|---|
-| `quill-sync-test.mjs` (`Plan/webapp-data_plan/tests/`) | 60건 통과 |
+| `quill-sync-test.mjs` (당시 외부 harness, 현재 없음) | 60건 통과 — 역사 기록 |
 | `tests/unit.test.mjs` (기존) | 51건 통과 |
 | `tests/dom.test.mjs` (기존) | 22건 통과 |
 
-**133건 통과, 0건 실패.**
+**133건 통과, 0건 실패**는 당시 결과이며 현재 결과처럼 표시하지 않습니다. 현재 저장소는 `tests/sync-contract.test.mjs`와 고정된 `jsdom` 의존성을 직접 소유하고 `npm ci && npm test`로 재실행합니다.
 
 ## 이 단계에서 가장 조심한 것 두 가지
 

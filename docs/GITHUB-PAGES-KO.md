@@ -41,7 +41,7 @@ manifest.webmanifest              내용이 같습니다
 1. `github.com/jennie-verse/quill` 을 엽니다.
 2. 위 목록의 **지울 파일**을 하나씩 열어 휴지통 아이콘으로 지우고 커밋합니다.
 3. **Add file → Upload files** 를 누릅니다.
-4. `quill-new` 폴더의 **내용물**을 통째로 끌어다 놓습니다. (`quill-new` 폴더 자체가 아니라 그 안의 것들입니다)
+4. authoritative source인 `WebApp/Published/quill/`의 tracked 파일을 올립니다. `WebApp/Deliverable/quill/`은 성공한 배포 확인용 snapshot이므로 직접 수정하지 않습니다.
 5. 커밋 메시지를 적고 **Commit changes** 를 누릅니다.
 
 > `.nojekyll` 은 점으로 시작해서 Finder에서 숨겨져 있을 수 있습니다. `⌘ + Shift + .` 으로 숨김 파일을 보이게 한 뒤 함께 올리세요. 이 파일이 없으면 `_` 로 시작하는 경로가 무시될 수 있습니다.
@@ -52,7 +52,7 @@ manifest.webmanifest              내용이 같습니다
 cd quill               # 기존 저장소를 받아 둔 폴더
 git rm -r --cached .github assets/index-*.js assets/index-*.css
 rm -rf .github assets/index-*.js assets/index-*.css assets/lexend-*
-cp -R /경로/quill-new/. .
+cp -R /경로/WebApp/Published/quill/. .
 git add -A
 git commit -m "Rewrite Quill as a static app with no build step"
 git push
