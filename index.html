@@ -185,6 +185,14 @@
         <p class="field-error" id="sync-message" role="status" aria-live="polite"></p>
       </section>
 
+      <section class="card" aria-labelledby="journal-title">
+        <h2 class="card-title" id="journal-title">Journal</h2>
+        <p class="card-note" id="journal-status" role="status" aria-live="polite">Off — document activity stays on this device.</p>
+        <p class="card-note">Starts off and is independent from Sync. Only a document title and created/opened/edited/export-requested activity are sent. Text is never copied.</p>
+        <button type="button" class="wide-button" id="journal-toggle" aria-pressed="false">Include in journal</button>
+        <p class="field-error" id="journal-message" role="status" aria-live="polite"></p>
+      </section>
+
       <section class="card" aria-labelledby="about-title">
         <h2 class="card-title" id="about-title">About</h2>
         <p class="card-note">

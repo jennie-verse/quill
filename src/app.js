@@ -25,6 +25,7 @@ import { findMatches, stepMatch, matchAtOrAfter, describeMatches } from './find.
 import { indent, outdent, newlineWithIndent, applyEdit, describeDocument } from './editor.js';
 import { buildBackup, checkBackupSize, parseBackup, backupFileName } from './backup.js';
 import { APP_BUILD } from './version.js';
+import * as Journal from './journal.js';
 
 /* 동기화 모듈은 필요할 때만 부릅니다. 이 파일 하나를 못 받아도 Quill 은
    그대로 떠야 하므로, 정적 import 로 물리지 않고 실패를 삼킵니다. */
@@ -44,6 +45,8 @@ const state = {
   composing: false,
   draftTimer: 0,
   toastTimer: 0,
+  journalSessionId: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+  journalFingerprint: '',
   find: { open: false, matches: [], index: -1 },
   confirmResolve: null,
   saveResolve: null
@@ -68,7 +71,8 @@ function collect() {
     'confirm-dialog', 'confirm-message', 'confirm-cancel', 'confirm-accept',
     'file-input', 'backup-input',
     'sync-status', 'sync-device-name', 'sync-token', 'sync-save-token', 'sync-clear-token',
-    'sync-toggle', 'sync-now', 'sync-message', 'app-version'
+    'sync-toggle', 'sync-now', 'sync-message', 'app-version',
+    'journal-status', 'journal-toggle', 'journal-message'
   ].forEach((name) => { el[name] = id(name); });
 }
 
@@ -244,12 +248,32 @@ function setDocument(text, fileName, { dirty = false } = {}) {
   refreshFind();
 }
 
+function documentFingerprint() {
+  let hash = 2166136261;
+  const input = `${state.fileName}\u0000${state.text}`;
+  for (let index = 0; index < input.length; index += 1) hash = Math.imul(hash ^ input.charCodeAt(index), 16777619);
+  return (hash >>> 0).toString(36);
+}
+
+function journalDocument() { return { id: state.journalSessionId, title: displayName() }; }
+
+function beginJournalSession(action) {
+  state.journalSessionId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+  state.journalFingerprint = documentFingerprint();
+  Journal.recordActivity(journalDocument(), action).catch(() => {});
+}
+
 function onEditorInput() {
   if (state.composing) return;
   state.text = el['editor-body'].value;
   state.dirty = true;
   renderDocument();
   refreshFind();
+  const fingerprint = documentFingerprint();
+  if (fingerprint !== state.journalFingerprint) {
+    state.journalFingerprint = fingerprint;
+    Journal.recordActivity(journalDocument(), 'edited').catch(() => {});
+  }
   scheduleDraft();
 }
 
@@ -318,6 +342,7 @@ async function openFile(file) {
   }
 
   setDocument(text, file.name, { dirty: false });
+  beginJournalSession('opened');
   await saveDraftNow();
   setStatus('File opened.', 'ok');
   toast('File opened.');
@@ -391,6 +416,7 @@ async function saveCopy() {
       state.dirty = false;
       renderDocument();
       await saveDraftNow();
+      Journal.recordActivity(journalDocument(), 'export-requested').catch(() => {});
       setStatus('File export requested.', 'ok');
       toast('Sent to Files.');
       return;
@@ -405,6 +431,7 @@ async function saveCopy() {
     state.dirty = false;
     renderDocument();
     await saveDraftNow();
+    Journal.recordActivity(journalDocument(), 'export-requested').catch(() => {});
     setStatus('File export requested.', 'ok');
     toast('Download started.');
   } catch (error) {
@@ -607,6 +634,7 @@ function bind() {
   el['new-button'].addEventListener('click', async () => {
     if (!(await guardUnsaved('Start a new file anyway?'))) return;
     setDocument('', '', { dirty: false });
+    beginJournalSession('created');
     await saveDraftNow();
     setStatus('New file ready.', 'ok');
     el['editor-body'].focus();
@@ -641,6 +669,7 @@ function bind() {
   el['find-previous'].addEventListener('click', () => moveFind(-1));
 
   bindSync();
+  el['journal-toggle'].addEventListener('click', () => { void toggleJournal(); });
   el['settings-open'].addEventListener('click', openSettings);
   el['settings-close'].addEventListener('click', closeSettings);
 
@@ -823,6 +852,7 @@ async function init() {
   el['app-version'].textContent = `Quill · App version ${APP_BUILD}`;
   if (await syncReady) {
     renderSyncStatus();
+    renderJournalStatus();
     // 동기화가 꺼져 있으면 요청이 나가지 않습니다. 실패해도 앱은 그대로 씁니다.
     pullSettingsNow().catch(() => {});
   } else {
@@ -911,6 +941,26 @@ function bindSync() {
   });
   el['sync-toggle'].addEventListener('click', () => { void toggleSync(); });
   el['sync-now'].addEventListener('click', () => { void syncNow(); });
+}
+
+function renderJournalStatus(message) {
+  const current = Journal.getJournalState();
+  el['journal-toggle'].textContent = current.enabled ? 'Stop including in journal' : 'Include in journal';
+  el['journal-toggle'].setAttribute('aria-pressed', String(current.enabled));
+  if (message !== undefined) { el['journal-message'].textContent = message; return; }
+  el['journal-message'].textContent = '';
+  el['journal-status'].textContent = current.enabled
+    ? `${current.status || 'Ready'}${current.pendingCount ? ` · ${current.pendingCount} pending` : ''}`
+    : 'Off — document activity stays on this device.';
+}
+
+async function toggleJournal() {
+  if (Journal.isJournalEnabled()) { await Journal.toggleJournal(false); renderJournalStatus(); return; }
+  if (!Sync?.getToken()) { renderJournalStatus('Save an access token in Sync first.'); return; }
+  const name = Sync.getContextLabel() || el['sync-device-name'].value.trim();
+  if (!/[a-z0-9]/i.test(name)) { renderJournalStatus('Enter a device name in Sync first.'); return; }
+  const result = await Journal.toggleJournal(true, name);
+  renderJournalStatus(result.ok ? 'Quill is now included in Daybook.' : 'Journal could not be enabled.');
 }
 
 init().catch(() => {

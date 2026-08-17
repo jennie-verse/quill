@@ -8,7 +8,7 @@
 // VERSION 은 src/version.js 의 APP_BUILD 와 항상 같아야 합니다.
 // Service Worker 가 캐시를 먼저 돌려주므로, 배포해도 기기에서는 이전 빌드가
 // 도는 시간이 있습니다. 설정 화면의 App version 이 그것을 눈으로 확인하는 수단입니다.
-const VERSION = '2026.08.10-sync1';
+const VERSION = '2026.08.17-journal1';
 const CACHE_NAME = `quill-shell-${VERSION}`;
 
 const PRECACHE_URLS = [
@@ -22,6 +22,8 @@ const PRECACHE_URLS = [
   './src/version.js',
   './src/settings.js',
   './src/sync.js',
+  './src/journal.js',
+  './src/journal-record.js',
   './src/recovery.js',
   './src/files.js',
   './src/find.js',
@@ -35,7 +37,8 @@ const PRECACHE_URLS = [
   // 공용 동기화 모듈. 다른 저장소에 있지만 같은 오리진이라 캐시할 수 있습니다.
   // 아래 install 은 파일 하나씩 담고 실패를 삼키므로, 이 파일이 잠깐 없어도
   // 설치가 실패하지 않습니다.
-  '../shared/v1/sync.js'
+  '../shared/v1/sync.js',
+  '../shared/v2/journal.js'
 ];
 
 self.addEventListener('install', (event) => {
