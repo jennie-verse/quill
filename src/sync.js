@@ -40,9 +40,12 @@ async function api() {
 }
 
 const NAMESPACE = 'quill';
+const HOSTNAME = globalThis.location?.hostname || '';
 
 const REPO = Object.freeze({
-  owner: 'jennie-verse',
+  owner: HOSTNAME.endsWith('.github.io')
+    ? HOSTNAME.slice(0, -'.github.io'.length)
+    : '',
   repo: 'webapp-data',
   branch: 'main'
 });

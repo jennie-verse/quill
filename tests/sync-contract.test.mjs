@@ -64,3 +64,12 @@ test('sync defaults to disabled without credentials and context', () => {
   assert.equal(sync.isReady(), false);
   assert.equal(sync.tokenHint(), '');
 });
+
+test('sync and journal derive the repository owner from the Pages hostname', () => {
+  for (const path of ['../src/sync.js', '../src/journal.js']) {
+    const source = readFileSync(new URL(path, import.meta.url), 'utf8');
+    assert.match(source, /globalThis\.location\?\.hostname/);
+    assert.match(source, /HOSTNAME\.endsWith\(["']\.github\.io["']\)/);
+    assert.doesNotMatch(source, /owner:\s*["']jennie-verse["']/);
+  }
+});

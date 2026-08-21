@@ -1,6 +1,12 @@
 import * as sync from './sync.js';
 import { localDate, localIso, mergeDocumentActivity } from './journal-record.js';
-const ENABLED = 'quill.journalEnabled.v1'; const ACTIVITY = 'quill.journalActivity.v1'; const REPO = { owner: 'jennie-verse', repo: 'webapp-data', branch: 'main' };
+const HOSTNAME = globalThis.location?.hostname || '';
+const ENABLED = 'quill.journalEnabled.v1'; const ACTIVITY = 'quill.journalActivity.v1'; const REPO = {
+  owner: HOSTNAME.endsWith('.github.io')
+    ? HOSTNAME.slice(0, -'.github.io'.length)
+    : '',
+  repo: 'webapp-data', branch: 'main'
+};
 let clientPromise = null; let lastState = { status: 'not reported', pendingCount: 0, errorCode: '' };
 const read = key => { try { return localStorage.getItem(key) || ''; } catch { return ''; } }; const write = (key, value) => { try { localStorage.setItem(key, value); } catch {} };
 const parse = value => { try { const parsed = JSON.parse(value); return parsed && typeof parsed === 'object' ? parsed : {}; } catch { return {}; } };
