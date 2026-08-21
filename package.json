@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests/unit.test.mjs && node tests/dom.test.mjs && node --test tests/sync-contract.test.mjs tests/journal.test.mjs"
+    "test": "node tests/unit.test.mjs && node tests/dom.test.mjs && node --test tests/sync-contract.test.mjs tests/journal.test.mjs tests/layout.test.mjs"
   },
   "devDependencies": {
     "jsdom": "26.1.0"

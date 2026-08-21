@@ -530,6 +530,32 @@ a:focus-visible {
   .status-bar { min-height: 26px; padding-top: 3px; padding-bottom: calc(3px + env(safe-area-inset-bottom)); }
 }
 
+/* 320px 폭과 같은 초소형 화면에서 UI 글자를 17px로 키워도
+   파일명과 도구가 충돌하지 않게 상단 도구를 아이콘으로 압축합니다.
+   버튼의 접근성 이름은 index.html의 aria-label이 계속 제공합니다. */
+@media (max-width: 359px) {
+  #editor-screen > .app-bar .app-bar-row { gap: 2px; padding-left: 4px; padding-right: 4px; }
+  #editor-screen > .app-bar .app-bar-row > .icon-button {
+    flex: 0 0 var(--touch);
+    width: var(--touch);
+    padding: 0;
+    overflow: hidden;
+    color: transparent;
+    font-size: 0;
+  }
+  #editor-screen > .app-bar .app-bar-row > .icon-button::before {
+    color: var(--rose-deep);
+    font-size: 20px;
+    line-height: 1;
+  }
+  #open-button::before { content: "↑"; }
+  #new-button::before { content: "+"; }
+  #find-button::before { content: "⌕"; }
+  #save-button::before { content: "↓"; }
+  #settings-open::before { content: "⚙"; }
+  .file-name { margin-left: 2px; margin-right: 2px; }
+}
+
 /* iPad 등 넓은 화면에서는 설정 카드가 지나치게 늘어나지 않게 합니다. */
 @media (min-width: 760px) {
   .settings-body { max-width: 720px; width: 100%; margin: 0 auto; }

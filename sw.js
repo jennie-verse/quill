@@ -8,7 +8,7 @@
 // VERSION 은 src/version.js 의 APP_BUILD 와 항상 같아야 합니다.
 // Service Worker 가 캐시를 먼저 돌려주므로, 배포해도 기기에서는 이전 빌드가
 // 도는 시간이 있습니다. 설정 화면의 App version 이 그것을 눈으로 확인하는 수단입니다.
-const VERSION = '2026.08.17-journal1';
+const VERSION = '2026.08.21-compact-toolbar';
 const CACHE_NAME = `quill-shell-${VERSION}`;
 
 const PRECACHE_URLS = [
