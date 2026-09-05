@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#FDF7F8">
+<meta name="description" content="A private, offline text editor for files kept in Files.">
+<meta name="format-detection" content="telephone=no">
+<meta name="referrer" content="no-referrer">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Quill">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.github.com; font-src 'self'; img-src 'self' data:; manifest-src 'self'; object-src 'none'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="./icons/icon-192.png">
+<link rel="stylesheet" href="./assets/app.css">
+<title>Quill</title>
+</head>
+<body>
+<noscript class="noscript">Quill needs JavaScript to edit text.</noscript>
+
+<a class="skip-link" href="#editor-body">Skip to the editor</a>
+
+<div class="app-shell" id="app-shell">
+
+  <!-- ── Editor screen ─────────────────────────────────────────────── -->
+  <div class="screen" id="editor-screen">
+
+    <header class="app-bar" id="app-bar">
+      <div class="app-bar-row">
+        <button type="button" class="icon-button" id="menu-open" aria-label="Open menu">⋯</button>
+
+        <h1 class="file-name" id="file-name-display" tabindex="-1">Untitled</h1>
+
+        <button type="button" class="icon-button" id="find-button" aria-label="Find text" aria-expanded="false">Find</button>
+        <button type="button" class="icon-button primary" id="save-button" aria-label="Save a copy to Files">Save</button>
+      </div>
+
+      <div class="find-bar" id="find-bar" hidden>
+        <label class="sr-only" for="find-input">Find text</label>
+        <input type="search" id="find-input" class="find-input" placeholder="Find" autocomplete="off"
+               autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
+        <span class="find-count" id="find-count" role="status" aria-live="polite">No matches</span>
+        <button type="button" class="icon-button" id="find-previous" aria-label="Previous match">Prev</button>
+        <button type="button" class="icon-button" id="find-next" aria-label="Next match">Next</button>
+        <label class="switch compact">
+          <input type="checkbox" id="find-match-case">
+          <span>Match Case</span>
+        </label>
+        <button type="button" class="icon-button" id="find-close" aria-label="Close Find">Close</button>
+      </div>
+    </header>
+
+    <main class="editor-area">
+      <label class="sr-only" for="editor-body">Document text</label>
+      <textarea id="editor-body" class="editor-body" spellcheck="false" autocapitalize="off"
+                autocomplete="off" autocorrect="off" wrap="soft"
+                placeholder="Type here, or open a text file from Files."></textarea>
+    </main>
+
+    <footer class="status-bar" id="status-bar">
+      <span class="status-text" id="document-status">1 lines · 0 characters</span>
+      <span class="status-text" id="save-status" role="status" aria-live="polite"></span>
+    </footer>
+  </div>
+
+  <!-- ── Settings screen ───────────────────────────────────────────── -->
+  <div class="screen settings-screen" id="settings-screen" hidden>
+    <header class="app-bar">
+      <div class="app-bar-row">
+        <h1 class="screen-title">Settings</h1>
+        <button type="button" class="icon-button primary" id="settings-close">Done</button>
+      </div>
+    </header>
+
+    <div class="settings-body">
+
+      <section class="card" aria-labelledby="interface-size-title">
+        <h2 class="card-title" id="interface-size-title">Interface Size</h2>
+        <p class="card-note">Menus, buttons, and labels. The editor text has its own size below.</p>
+        <div class="size-picker" id="interface-size-picker" role="group" aria-label="Interface size">
+          <button type="button" data-size="6">6</button>
+          <button type="button" data-size="8">8</button>
+          <button type="button" data-size="10">10</button>
+          <button type="button" data-size="12">12</button>
+          <button type="button" data-size="14">14</button>
+          <button type="button" data-size="17">17</button>
+        </div>
+        <button type="button" class="text-button" id="interface-size-reset">Reset</button>
+      </section>
+
+      <section class="card" aria-labelledby="editor-size-title">
+        <h2 class="card-title" id="editor-size-title">Text Size</h2>
+        <p class="card-note">The document text. 16 is the smallest so tapping the editor never zooms the screen.</p>
+        <div class="size-picker" id="editor-size-picker" role="group" aria-label="Editor text size">
+          <button type="button" data-size="16">16</button>
+          <button type="button" data-size="18">18</button>
+          <button type="button" data-size="20">20</button>
+          <button type="button" data-size="24">24</button>
+          <button type="button" data-size="28">28</button>
+          <button type="button" data-size="32">32</button>
+        </div>
+        <button type="button" class="text-button" id="editor-size-reset">Reset</button>
+      </section>
+
+      <section class="card" aria-labelledby="editing-title">
+        <h2 class="card-title" id="editing-title">Editing</h2>
+
+        <div class="field-row">
+          <span class="field-label" id="tab-spaces-label">Tab spaces</span>
+          <div class="segmented" id="tab-size-picker" role="group" aria-labelledby="tab-spaces-label">
+            <button type="button" data-tab="2">2</button>
+            <button type="button" data-tab="4">4</button>
+            <button type="button" data-tab="8">8</button>
+          </div>
+        </div>
+
+        <label class="switch">
+          <input type="checkbox" id="wrap-toggle">
+          <span>Word wrap</span>
+        </label>
+        <label class="switch">
+          <input type="checkbox" id="spellcheck-toggle">
+          <span>Spellcheck</span>
+        </label>
+        <label class="switch">
+          <input type="checkbox" id="autocorrect-toggle">
+          <span>Autocorrect</span>
+        </label>
+      </section>
+
+      <section class="card" aria-labelledby="extension-title">
+        <h2 class="card-title" id="extension-title">Extension</h2>
+        <p class="card-note">Used when a new file is saved without one.</p>
+        <div class="quick-extensions" id="quick-extensions" role="group" aria-label="Quick extensions"></div>
+        <div class="field-row">
+          <label class="field-label" for="custom-extension">Custom</label>
+          <input type="text" id="custom-extension" class="text-input" placeholder=".txt"
+                 autocapitalize="off" autocorrect="off" spellcheck="false">
+        </div>
+        <p class="field-error" id="extension-error" role="alert"></p>
+      </section>
+
+      <section class="card" aria-labelledby="sync-title">
+        <h2 class="card-title" id="sync-title">Sync</h2>
+        <p class="card-note" id="sync-status" role="status" aria-live="polite">Off — everything stays on this device.</p>
+        <p class="card-note">Settings only. Your draft and files are never uploaded.</p>
+
+        <label class="field-label" for="sync-device-name">Device name</label>
+        <input type="text" id="sync-device-name" class="text-input" placeholder="iphone-home"
+               autocapitalize="none" autocomplete="off" spellcheck="false">
+        <p class="card-note">English letters and numbers only — the file name is built from this and cannot be changed later.</p>
+
+        <label class="field-label" for="sync-token">Access token</label>
+        <input type="password" id="sync-token" class="text-input" placeholder="github_pat_…"
+               autocapitalize="none" autocomplete="off" spellcheck="false">
+        <div class="button-row">
+          <button type="button" class="wide-button" id="sync-save-token">Save token</button>
+          <button type="button" class="wide-button" id="sync-clear-token">Clear token</button>
+        </div>
+
+        <div class="button-row">
+          <button type="button" class="wide-button" id="sync-toggle" aria-pressed="false">Turn sync on</button>
+          <button type="button" class="wide-button" id="sync-now">Sync now</button>
+        </div>
+        <p class="field-error" id="sync-message" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="card" aria-labelledby="journal-title">
+        <h2 class="card-title" id="journal-title">Journal</h2>
+        <p class="card-note" id="journal-status" role="status" aria-live="polite">Off — document activity stays on this device.</p>
+        <p class="card-note">Starts off and is independent from Sync. Only a document title and created/opened/edited/export-requested activity are sent. Text is never copied.</p>
+        <button type="button" class="wide-button" id="journal-toggle" aria-pressed="false">Include in journal</button>
+        <div class="button-row">
+          <label class="field-label">From<input type="date" id="journal-from" class="text-input"></label>
+          <label class="field-label">To<input type="date" id="journal-to" class="text-input"></label>
+        </div>
+        <button type="button" class="wide-button" id="journal-backfill">Add captured history</button>
+        <button type="button" class="wide-button danger" id="journal-clear-activity">Clear captured activity</button>
+        <p class="card-note">Exact history starts with this version. Earlier file activity cannot be reconstructed.</p>
+        <p class="field-error" id="journal-message" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="card" aria-labelledby="data-title">
+        <h2 class="card-title" id="data-title">Data</h2>
+        <p class="card-note">Recovery draft and preferences only. Your files stay in Files.</p>
+        <label class="switch">
+          <input type="checkbox" id="include-snapshots-toggle" checked>
+          <span>Include snapshots(스냅샷) in backup</span>
+        </label>
+        <div class="button-row">
+          <button type="button" class="wide-button" id="export-backup">Export Backup</button>
+          <button type="button" class="wide-button" id="restore-backup">Restore Backup</button>
+        </div>
+        <p class="field-error" id="settings-message" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="card" aria-labelledby="about-title">
+        <h2 class="card-title" id="about-title">About</h2>
+        <p class="card-note">
+          Quill keeps nothing on a server. The draft below stays on this device only.
+          Font: Lexend, with system fallbacks.
+        </p>
+        <p class="card-note" id="app-version">Quill</p>
+      </section>
+
+      <section class="card" aria-labelledby="danger-title">
+        <h2 class="card-title" id="danger-title">Danger Zone</h2>
+        <div class="button-row">
+          <button type="button" class="wide-button caution" id="clear-recovery">Clear recovery data</button>
+          <button type="button" class="wide-button caution" id="clear-data">Clear Data</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ── Snapshots screen ──────────────────────────────────────────── -->
+  <div class="screen snapshots-screen" id="snapshots-screen" hidden>
+    <header class="app-bar">
+      <div class="app-bar-row">
+        <h1 class="screen-title">Snapshots(스냅샷)</h1>
+        <button type="button" class="icon-button primary" id="snapshots-close">Done</button>
+      </div>
+    </header>
+    <div class="settings-body">
+      <section class="card">
+        <p class="card-note" id="snapshots-file-label">Untitled</p>
+        <p class="card-note">Up to 10 per file(파일당 최대 10개). Saving an 11th removes the oldest.</p>
+        <button type="button" class="wide-button primary" id="snapshot-save-now">Save a snapshot now</button>
+      </section>
+      <section class="card">
+        <div class="snapshot-list" id="snapshot-list"></div>
+        <p class="card-note" id="snapshot-empty-hint">No snapshots for this file yet.</p>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- ── Snapshot preview dialog ───────────────────────────────────── -->
+<dialog class="sheet" id="snapshot-preview-dialog" aria-labelledby="snapshot-preview-title">
+  <form method="dialog">
+    <h2 class="sheet-title" id="snapshot-preview-title">Snapshot</h2>
+    <p class="sheet-note" id="snapshot-preview-meta"></p>
+    <pre class="snapshot-preview-text" id="snapshot-preview-text"></pre>
+    <div class="sheet-buttons">
+      <button type="button" class="wide-button caution" id="snapshot-delete">Delete</button>
+      <button type="button" class="wide-button" id="snapshot-preview-close">Close</button>
+      <button type="button" class="wide-button primary" id="snapshot-restore">Restore(복원)</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ── Toast ───────────────────────────────────────────────────────── -->
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<!-- ── Save dialog ─────────────────────────────────────────────────── -->
+<dialog class="sheet" id="save-dialog" aria-labelledby="save-dialog-title">
+  <form method="dialog" id="save-form">
+    <h2 class="sheet-title" id="save-dialog-title">Save a Copy</h2>
+    <p class="sheet-note">The file is sent to Files. Quill cannot write back to the original.</p>
+
+    <label class="field-label" for="save-name">File name</label>
+    <input type="text" id="save-name" class="text-input" autocapitalize="off" autocorrect="off"
+           spellcheck="false" enterkeyhint="done" required>
+
+    <label class="field-label" for="save-extension">Extension</label>
+    <input type="text" id="save-extension" class="text-input" placeholder=".txt"
+           autocapitalize="off" autocorrect="off" spellcheck="false">
+
+    <p class="sheet-preview" id="save-preview">untitled.txt</p>
+    <p class="field-error" id="save-error" role="alert"></p>
+
+    <div class="sheet-buttons">
+      <button type="button" class="wide-button" id="save-cancel">Cancel</button>
+      <button type="submit" class="wide-button primary" id="save-confirm">Continue to Files</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ── Menu dialog ────────────────────────────────────────────────────── -->
+<dialog class="sheet" id="menu-dialog" aria-labelledby="menu-title">
+  <form method="dialog">
+    <h2 class="sheet-title" id="menu-title">Menu</h2>
+    <div class="sheet-buttons">
+      <button type="button" class="wide-button" id="menu-open-button">Open</button>
+      <button type="button" class="wide-button" id="menu-new-button">New</button>
+      <button type="button" class="wide-button" id="menu-snapshots-open">Snapshots</button>
+      <button type="button" class="wide-button" id="menu-settings-open">Settings</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ── Confirm dialog ──────────────────────────────────────────────── -->
+<dialog class="sheet" id="confirm-dialog" aria-labelledby="confirm-title">
+  <form method="dialog">
+    <h2 class="sheet-title" id="confirm-title">Confirm</h2>
+    <p class="sheet-note" id="confirm-message"></p>
+    <div class="sheet-buttons">
+      <button type="button" class="wide-button" id="confirm-cancel">Keep Editing</button>
+      <button type="button" class="wide-button caution" id="confirm-accept">Discard Changes</button>
+    </div>
+  </form>
+</dialog>
+
+<input type="file" id="file-input" class="sr-only" accept="text/*,.txt,.md,.json,.csv,.sql,.js,.py,.html,.css,.log,.xml,.yml,.yaml,.ini,.conf">
+<input type="file" id="backup-input" class="sr-only" accept="application/json,.json">
+
+<script type="module" src="./src/app.js"></script>
+</body>
+</html>

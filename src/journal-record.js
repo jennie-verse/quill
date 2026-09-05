@@ -1,0 +1,9 @@
+const ORDER = ['created', 'opened', 'edited', 'export-requested'];
+const pad = value => String(Math.abs(value)).padStart(2, '0');
+export function localDate(value = new Date()) { const d = new Date(value); if (Number.isNaN(d.getTime())) throw new Error('Invalid date'); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
+export function localIso(value = new Date()) { const d = new Date(value); const offset = -d.getTimezoneOffset(); const sign = offset >= 0 ? '+' : '-'; return `${localDate(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3, '0')}${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`; }
+export function mergeDocumentActivity(previous, document, action, at = new Date(), options = {}) {
+  if (!document?.id || !ORDER.includes(action)) throw new Error('Invalid Quill journal activity');
+  const timestamp = localIso(at); const date = localDate(at); const actions = new Set(previous?.data?.actions || []); actions.add(action);
+  return { id: `${document.id}:${date}`, kind: 'file-activity', at: previous?.at && previous.at < timestamp ? previous.at : timestamp, updatedAt: timestamp, deleted: false, title: String(document.title || 'Untitled'), data: { itemId: String(document.id), itemType: 'text-document', actions: ORDER.filter(value => actions.has(value)), firstAt: previous?.data?.firstAt && previous.data.firstAt < timestamp ? previous.data.firstAt : timestamp, lastAt: previous?.data?.lastAt && previous.data.lastAt > timestamp ? previous.data.lastAt : timestamp, openCount: Math.max(0, Number(previous?.data?.openCount) || 0) + (action === 'opened' ? 1 : 0), ...(options.importedHistory ? { importedHistory: true, historyAccuracy: options.historyAccuracy || 'exact' } : {}) } };
+}

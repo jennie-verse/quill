@@ -1,0 +1,286 @@
+# Quill 검토 결과
+
+대상: 현재 authoritative source인 `WebApp/Published/quill/`
+기준: `WebApp_House_Style.md` 10장, 프로젝트 지시문 검토 기준
+
+## 2026-08-10 현재 재실행 결과
+
+`npm ci && npm test`로 단위 51건, DOM 22건, sync contract 5건을 재실행해 **78건 통과, 0건 실패**를 확인했습니다. `jsdom`은 `26.1.0`으로 고정했고 `package-lock.json`과 GitHub Actions test workflow를 저장소가 직접 소유합니다. 아래의 133건 기록은 당시 외부 harness 결과이며 현재 결과와 분리합니다.
+
+---
+
+## 요약
+
+| 구분 | 건수 |
+|---|---|
+| 자동 테스트 통과 | 73 (단위 51 + 화면 22) |
+| 검토 중 고친 문제 | 3 |
+| 실기기에서 직접 확인하실 항목 | 12 |
+
+콘솔 오류 **0건**. 외부 요청 **0건**.
+
+---
+
+## 1. 통과한 항목
+
+### 자동 테스트
+
+```sh
+npm ci
+npm test                      # 단위 51 + 화면 22 + sync contract
+```
+
+**단위 테스트 51건** — 들여쓰기·내어쓰기·줄바꿈 승계, 검색(대소문자·순환·한글·정규식 문자), 파일명 검증, 확장자 분리·결합, 바이너리 판정, 설정 정규화, 백업 형식 검사와 왕복.
+
+**화면 테스트 22건** — 초기화 시 콘솔 오류 0건, 설정 화면 배선, 이름 없는 버튼 0개, label 없는 입력창 0개, 입력 시 상태 갱신, 검색 동작, 사용자 텍스트가 HTML로 실행되지 않음.
+
+### 코드와 PWA
+
+| 항목 | 결과 |
+|---|---|
+| HTML·CSS·JS 문법 | 8개 파일 모두 통과 (acorn ES2022 module) |
+| Console 오류 | 0건 |
+| 누락된 파일·잘못된 경로 | 없음. `sw.js`의 캐시 목록 18개 전부 실재 |
+| GitHub Pages 하위 경로 | 절대 경로 0건. 모든 경로가 `./` 상대 경로 |
+| Manifest·아이콘 경로 | 아이콘 4개 실재, manifest 경로 모두 상대 |
+| Service Worker 캐시 버전 | `quill-shell-v1`. 활성화 시 이전 캐시 삭제 |
+| 외부 CDN·웹폰트·분석·로그인 | 없음. 외부 URL 0건 |
+| 빌드 도구 | 없음. 폴더를 그대로 배포 |
+
+### 보안
+
+| 항목 | 결과 |
+|---|---|
+| 사용자 텍스트가 HTML로 실행되는지 | 실행 안 됨. `innerHTML`·`outerHTML`·`insertAdjacentHTML`·`document.write` 미사용 |
+| `eval`·`new Function` | 미사용 |
+| 외부 주소로 요청 | 없음. Service Worker도 같은 출처만 처리 |
+| API Key·비밀번호 | 없음 (서버를 쓰지 않음) |
+| 파일명 주입 | `/ \ : * ? " < > |` 와 제어문자를 막음. `.`·`..` 거부 |
+| 확장자 주입 | `../x` 같은 경로 문자 거부 |
+
+### 하우스 기준
+
+| 항목 | 결과 |
+|---|---|
+| 대표색 Soft Rose Pink | 적용 (`#EFB3C1` 계열) |
+| 본문 글자 순수 검정 미사용 | Rose Grey `#4A3A40` |
+| Lexend 동봉 + Verdana 대체 | 400·700 woff2 포함, 라이선스 동봉 |
+| 글자 크기 6단계 (6/8/10/12/14/17) | Interface Size에 적용, 기본 12px, Reset 있음 |
+| 입력창 16px 고정 | Find 입력창·설정 입력창 모두 16px |
+| 터치 영역 44×44px | 모든 버튼에 `min-height/min-width: 44px` |
+| Safe Area | 상단 바·상태 표시줄·설정 화면에 적용 |
+| Focus 표시 유지 | 제거하지 않음. 테마색 outline |
+| 색 외의 상태 단서 | 선택 상태에 `✓`, 저장 상태에 `✓ ! ✕` 기호 병행 |
+| `prefers-reduced-motion` | 적용 |
+| 삭제·초기화 전 확인 | Clear recovery / Clear Data / Restore / 저장 안 한 변경 모두 확인창 |
+| 앱 UI 영문 | 전부 영문 |
+| 한글 입력·파일명 | 한글 파일명 허용, IME 조합 중 단축키 차단 |
+| 데이터 호환 | IndexedDB·localStorage 키를 이전 버전과 동일하게 유지 |
+
+### 저장소 크기
+
+2.1MB → **628KB**. 폰트 19개를 2개로 줄이고 React 번들을 없앤 결과입니다.
+
+---
+
+## 2. 검토 중 고친 문제
+
+| # | 문제 | 조치 |
+|---|---|---|
+| 1 | Service Worker 속성은 있는데 값이 `undefined`인 환경(비공개 브라우징 등)에서 `register` 호출 시 예외 발생 | `'serviceWorker' in navigator` 대신 객체와 `register` 함수 존재를 함께 확인하도록 변경 |
+| 2 | 파일명 검사 정규식과 NUL 판정에 제어문자가 소스에 그대로 들어가 파일이 바이너리로 인식됨 | `\x00` 형태의 이스케이프 표기로 교체 |
+| 3 | `describeDocument`가 한글·이모지를 코드 유닛으로 세어 글자 수가 부풀려짐 | `Array.from`으로 글자 단위 계수로 변경 |
+
+---
+
+## 3. 실기기에서 직접 확인하실 항목 (Pending)
+
+jsdom은 Safari가 아니고, 파일 선택·공유 시트·IndexedDB·키보드는 실제 기기에서만 확인됩니다.
+
+### 꼭 확인해 주세요
+
+| # | 항목 | 확인 방법 |
+|---|---|---|
+| 1 | **파일 열기** | Open → Files에서 `.txt`, `.md` 파일 선택 → 내용이 그대로 뜨는지. **한글 파일명**도 확인 |
+| 2 | **저장** | Save → 이름 입력 → Continue to Files → 공유 시트에서 "파일에 저장". **한글 파일명**으로도 저장되는지 |
+| 3 | **새로고침 후 데이터 유지** | 글을 쓰고 `Draft saved` 확인 → 앱 완전 종료 → 다시 열어 `Draft restored` 와 내용 확인 |
+| 4 | **이전 버전 초안 이어받기** | 이전 Quill에서 편집 중이던 초안이 있다면, 새 버전에서 그대로 열리는지 |
+| 5 | **백업·복원** | Export Backup → Restore Backup 왕복. 한글 초안이 깨지지 않는지 |
+| 6 | **한글 IME** | 한글 입력 도중 `Tab`·`Enter`를 눌러 조합이 깨지거나 글자가 중복되지 않는지 |
+| 7 | **글자 크기 6단계** | 6·8·10·12·14·17 각 단계에서 버튼 겹침·글자 잘림이 없는지, 6px에서도 버튼이 눌리는지 |
+| 8 | **키보드 열린 상태** | 키보드가 올라왔을 때 Save·Find 버튼이 가려지지 않는지. 저장 시트의 버튼이 화면 밖으로 나가지 않는지 |
+| 9 | **화면 방향 4가지** | iPhone 세로·가로, iPad 세로·가로. 특히 iPhone 가로에서 상단 바가 너무 두껍지 않은지 |
+| 10 | **Safe Area** | 홈 인디케이터가 상태 표시줄을 가리지 않는지, Dynamic Island가 상단 버튼을 가리지 않는지 |
+| 11 | **오프라인 실행** | 온라인에서 한 번 연 뒤 비행기 모드로 다시 열기 |
+| 12 | **Add to Home Screen** | 홈 화면에 추가 후 아이콘·이름·standalone 실행 확인 |
+
+### 알아두실 점
+
+- **Word wrap을 끄면** 긴 줄이 좌우로 스크롤됩니다. iPhone 세로에서 코드를 볼 때 의도한 동작입니다.
+- **Autocorrect는 기본 꺼짐**입니다. 코드나 설정 파일을 편집할 때 자동 수정이 방해가 되기 때문입니다. 일반 글을 쓰실 때는 켜세요.
+- 이전 버전의 Interface Size(4단계)는 값이 맞지 않아 **글자 크기 하나만 기본값 12px로 초기화**됩니다. 나머지 설정은 이어집니다.
+
+---
+
+## 4. 이번 범위에 넣지 않은 것
+
+프로젝트 지시문에 따라 계획서에 없는 기능은 추가하지 않았습니다.
+
+- 문서 라이브러리 (여러 파일 보관)
+- 파일 탭 여러 개
+- 마크다운 미리보기
+- 기기 간 동기화
+- 실행 취소 이력 직접 관리 (브라우저 기본 Undo를 그대로 씁니다)
+
+필요하시면 계획서를 먼저 만들고 진행합니다.
+
+---
+
+## 5. 배포 전 남은 일
+
+1. 위 Pending 12건을 실기기에서 확인
+2. `docs/GITHUB-PAGES-KO.md` 순서대로 이전 버전 파일 정리 후 배포
+3. Pages 소스를 GitHub Actions → 브랜치 루트로 변경
+4. 배포 URL이 열리는 것을 확인한 뒤 `Published/quill/` 교체
+
+---
+
+# 2026-08-10 — webapp-data 연결 (7단계, 마지막)
+
+**설정 동기화**만 붙였습니다. 이벤트(B층)와 백업(C층)은 계획서대로 넣지 않았습니다.
+검사 방법: Node 22 + jsdom. 공용 모듈 `shared/v1/sync.js`를 메모리 저장소로 동작하는 가짜 모듈로 바꿔치기해 네트워크 없이 실행했습니다. **앱 코드는 검사용으로 한 줄도 고치지 않았습니다.**
+
+| 스크립트 | 결과 |
+|---|---|
+| `quill-sync-test.mjs` (당시 외부 harness, 현재 없음) | 60건 통과 — 역사 기록 |
+| `tests/unit.test.mjs` (기존) | 51건 통과 |
+| `tests/dom.test.mjs` (기존) | 22건 통과 |
+
+**133건 통과, 0건 실패**는 당시 결과이며 현재 결과처럼 표시하지 않습니다. 현재 저장소는 `tests/sync-contract.test.mjs`와 고정된 `jsdom` 의존성을 직접 소유하고 `npm ci && npm test`로 재실행합니다.
+
+## 이 단계에서 가장 조심한 것 두 가지
+
+### 1. 새로 깐 기기의 기본값이 다른 기기의 설정을 덮지 않는가
+
+설정 동기화에서 가장 흔한 사고입니다. 앱을 새로 깐 기기가 켜지자마자 기본 설정을 최신 시각으로 올리면, 다른 기기에서 맞춰 둔 값이 사라집니다.
+
+- [x] **사용자가 설정을 실제로 바꿨을 때만 시각 도장을 찍습니다** — `persistSettings()` 한 곳에서만
+- [x] **도장이 없으면 아예 올리지 않습니다** — 요청이 0회
+- [x] 받을 때도 **원격 도장이 내 것보다 최신일 때만** 적용합니다
+- [x] 시각이 같으면 적용하지 않습니다 (서로 되돌리는 것 방지)
+- [x] 내 쪽이 더 최신이면 화면이 그대로 유지됩니다
+- [x] 적용한 뒤에는 도장을 원격 시각으로 맞춰, 곧바로 되돌려 올리지 않습니다
+
+### 2. 편집 중인 글이 올라가지 않는가
+
+- [x] `sync.js`가 `SETTING_KEYS` 목록으로 **필드를 하나씩 골라 담습니다**
+- [x] 초안이 섞인 객체를 일부러 넘겨도 **올라간 파일에 그 문자열이 없습니다**
+- [x] 올라간 설정은 알려진 7개뿐입니다
+- [x] `sync.js`에 `draft`라는 낱말이 한 번도 나오지 않습니다
+
+> 처음 구현은 넘어온 객체를 그대로 직렬화하고 있었습니다. 초안을 섞어 넣는 검사에서 걸려 `pickSettings()`를 추가했습니다. 앱은 지금도 `state.settings`만 넘기지만, 나중에 한 줄 잘못 고쳐도 개인 글이 새 나가지 않도록 마지막 벽을 둔 것입니다.
+
+## 통과 — 나머지
+
+- [x] CSP `connect-src`에 `https://api.github.com` 추가 (원래 `'self'`뿐이었음)
+- [x] Service Worker는 원래부터 크로스오리진을 통과시키고 있었습니다 — 고칠 것이 없었습니다
+- [x] `sw.js`의 `VERSION`과 `src/version.js`의 `APP_BUILD`가 같습니다
+- [x] 캐시 이름이 올라갔고(`quill-shell-v4` → `quill-shell-2026.08.10-sync1`) `quill-` 접두사만 지웁니다
+- [x] 새 파일 2개가 캐시 목록에 있고, 공용 모듈은 설치를 막지 않습니다
+- [x] **동기화 모듈을 못 받아도 앱이 그대로 뜹니다** — 동적 import, 실패를 삼키고 화면에 알림
+- [x] 동기화는 처음에 꺼져 있고, 꺼진 상태에서 요청이 0회입니다
+- [x] 기기 이름을 켜기 전에 받고, 한글만 적으면 `context-…`가 됩니다
+- [x] 토큰 칸이 `password`이고 마지막 네 자리만 표시합니다
+- [x] `About`에 App version이 보입니다
+- [x] 기존 검사 73건이 그대로 통과합니다
+
+## Pending — 실기기(iPhone)에서만 확인 가능 (2026-08-10 추가분)
+
+- [ ] Settings → Sync에서 기기 이름·토큰을 넣고 켜기
+- [ ] 켠 뒤 About의 App version이 `2026.08.10-sync1`인지
+- [ ] 글자 크기를 바꾼 뒤, 다른 기기(또는 Safari ↔ 홈 화면 앱)에서 열었을 때 그 값이 따라오는지
+- [ ] **쓰던 글과 초안이 그대로 남아 있는지** (동기화가 건드리지 않아야 정상)
+
+## 배포
+
+- 커밋 `28b8dd8`, `jennie-verse/quill` main. 파일 8개 (수정 6 · 추가 2)
+- Pages 소스는 **브랜치 루트**(legacy, main `/`)입니다. Actions 워크플로가 없어 25초 만에 반영됐습니다.
+- 배포 확인 — `/quill/`(CSP), `/quill/src/version.js`, `/quill/sw.js`(VERSION), `/quill/src/sync.js`, `/shared/v1/sync.js` 모두 200
+
+## 함께 고친 것 — 이 문서가 git에서 바이너리로 취급되던 문제
+
+이 문서 위쪽 "고친 문제" 표의 2번 항목이 **자기가 설명하는 실수를 그대로 저지르고 있었습니다.**
+"제어문자가 소스에 그대로 들어가 파일이 바이너리로 인식됨 → 이스케이프 표기로 교체"라고 적어 두고,
+정작 그 칸에 진짜 NUL 바이트(`U+0000`)를 그대로 넣어 두었습니다.
+
+그래서 이 파일 전체가 git에서 `Bin 7264 -> 11018 bytes`로 표시되고, GitHub에서 **변경 내용을 볼 수 없었습니다.**
+문서를 고쳐도 무엇이 달라졌는지 확인할 방법이 없는 상태였습니다.
+
+NUL 바이트를 `\x00` 표기로 바꿔 UTF-8 텍스트로 되돌렸습니다. 이제 diff가 정상적으로 보입니다.
+
+## 2026-08-26 Journal ledger backup
+
+- **Pass:** 기존 83개 검증과 새 전체 source syntax; Journal off 90일 exact ledger, future-only 안내, backup/restore/clear.
+- **Pass:** desktop·390×844 Settings, overflow 0, console warning/error 0.
+- **Pending:** 실제 private E2E와 iPhone/iPad Home Screen Files/Share Sheet 문맥.
+
+## 2026-08-26 스냅샷(버전 기록)
+
+계획서: `Plan/webapp-benchmark/Productivity_App_Benchmark_Plan_2026-08-26.md` B-2 항목.
+
+### 바꾼 것
+
+- `src/recovery.js` — `text-editor-recovery` DB를 v1 → v2로 올려 `snapshots` object store(keyPath `id` autoIncrement, `fileName` 인덱스) 추가. 기존 `drafts` store와 `active-draft` 복구 동작은 그대로. 내부 트랜잭션 헬퍼를 `runStoreTransaction`으로 일반화해 export.
+- `src/snapshots.js` — 신규. `createSnapshot`(저장 후 파일당 10개 상한 초과분 자동 삭제), `listSnapshots`(최신순), `deleteSnapshot`, `getAllSnapshots`, `replaceAllSnapshots`(복원용, id는 새로 부여), `clearAllSnapshots`, `normalizeSnapshot`.
+- `src/backup.js` — `buildBackup`에 `snapshots` 옵션 추가. `settings.includeSnapshotsInBackup`이 꺼져 있으면 **`snapshots` 키 자체가 백업 JSON에서 빠짐**(빈 배열이 아니라 키 부재). `parseBackup`은 키가 없으면 `undefined`를 돌려주어, 옛 백업이나 토글이 꺼진 백업을 복원해도 기존 스냅샷을 지우지 않도록 함.
+- `src/settings.js` — `includeSnapshotsInBackup`(기본 `true`) 추가. Sync의 `SETTING_KEYS`에는 넣지 않아 기기 간 동기화 대상에서 제외(로컬 전용 선호도).
+- `index.html` — 상단 도구모음에 `Snapshots` 버튼, 전체화면 `Snapshots` 스크린(목록 + Save now), `<dialog>` 미리보기(읽기 전용 + Restore/Delete/Close), Settings → Data에 `Include snapshots in backup` 체크박스.
+- `assets/app.css` — `.snapshot-list`/`.snapshot-row`/`.snapshot-preview-text`, 320px 이하 아이콘 압축 모드에 `#snapshots-open` 글리프 추가.
+- `src/app.js` — 화면 전환, 목록/미리보기 렌더, 저장·복원·삭제 흐름, `exportBackup`/`restoreBackupFile`/`clearAllData`에 스냅샷 연결.
+- `tests/unit.test.mjs` — `snapshots.js`의 순수 함수(정규화, 상수)와 `backup.js`의 스냅샷 포함/제외/미포함-시-undefined 라운드트립 검증 8건 추가.
+- `sw.js`, `src/version.js` — 캐시 버전 `2026.08.26-journal-ledger-backup1` → `2026.08.26-snapshots1`, `PRECACHE_URLS`에 `src/snapshots.js` 추가.
+
+### 통과 — 자동
+
+- `npm test` **전체 통과**(`unit.test.mjs` 58/58, `dom.test.mjs`, `node --test`로 묶은 `sync-contract`/`journal`/`layout` 10건) + `npm run test:syntax`(신규 `snapshots.js` 포함) 통과.
+
+### 통과 — 실제 브라우저(2026-08-26, 이 세션에서 헤드리스 Chrome + DevTools Protocol로 실제 조작 재현)
+
+`WebApp/Published/`를 정적 서버로 띄워 `/quill/`과 `/shared/`가 배포와 동일한 형제 경로가 되도록 재현하고, 실제 페이지에서 클릭·입력을 재현했습니다.
+
+- [x] 한글 본문 입력 → Snapshot 저장 → 목록에 1건 표시
+- [x] 본문을 바꿔 2번째 Snapshot 저장 → 목록 2건, 최신순 정렬
+- [x] 가장 오래된 항목 미리보기 → 저장했던 한글 본문이 그대로 표시(무손실)
+- [x] Restore 확인 → **복원 직전 현재 내용이 자동으로 스냅샷 추가**(총 3건: 수동 2 + 자동 1) → 에디터 본문이 정확히 그 시점 내용으로 교체 → Snapshots 화면이 닫히고 에디터로 복귀
+- [x] 이어서 8개를 더 저장(총 11개 시도) → **정확히 10개로 유지**(가장 오래된 것부터 자동 삭제)
+- [x] 최신 항목 1개 삭제(확인 경유) → 9개로 감소
+- [x] **페이지 새로고침 후에도** 스냅샷 9개와 `active-draft` 복구 본문이 그대로 유지(기존 복구 동작 회귀 없음)
+- [x] `buildBackup`에 스냅샷 포함(토글 on) → JSON에 `snapshots` 키와 9건 전부 존재
+- [x] 토글 off로 `buildBackup` 호출 → JSON에 `snapshots` 키 자체가 없음
+- [x] `replaceAllSnapshots`(복원 경로) → 기존 전체가 교체되고 한글 본문 무손실
+- [x] `clearAllSnapshots`(Clear Data 경로) → 0건으로 초기화
+- [x] 위 전체 시나리오에서 콘솔 오류·경고·미처리 예외 **0건**
+
+### 완료 조건 대조
+
+- [x] 저장→목록→미리보기→복원 동작
+- [x] 10개 상한과 자동 삭제(11번째 저장 시 실측 확인)
+- [x] 복원 전 자동 스냅샷(실측 확인, 대상 텍스트는 메모리에 미리 캡처해 두어 상한 삭제와 경쟁하지 않음)
+- [x] 백업·전체삭제·복원 후 스냅샷 동일(실측 확인)
+- [x] 한글 본문 무손실(저장·미리보기·복원·백업 왕복 전 구간에서 확인)
+- [x] 콘솔 오류 0건
+- [x] `sw.js` 캐시 버전 상승·새 모듈(`snapshots.js`) 캐시 등록
+- [x] 기존 `active-draft` 복구 동작 불변(재시작 후에도 최신 편집 내용 복구 확인)
+- [x] Journal `file-activity` 계약 불변 — `journal.js`/`journal-record.js` 미수정, 새 kind를 만들지 않았고 스냅샷 저장/복원은 Journal에 아예 기록하지 않기로 결정(아래 "작은 판단" 참고)
+
+### 작은 판단(계획서에 명시 없어 이 작업에서 정함)
+
+**스냅샷 저장·복원을 Journal에 기록하지 않기로 함.** 요청문은 "기존 action 목록 안에서 처리하거나, 아예 기록하지 않는다" 둘 중 하나를 선택하도록 했습니다. `file-activity`의 기존 action(created/opened/edited/export-requested)은 전부 "파일에 대해 실제로 한 일"을 가리키는데, 스냅샷 저장·복원은 개념적으로 다르고(원본 파일을 향한 행위가 아니라 앱 내부 버전 관리), 억지로 `edited`에 끼워 넣으면 나중에 "진짜 편집"과 "복원으로 인한 편집"을 구분할 수 없게 됩니다. 새 kind를 만드는 것은 명시적으로 금지되어 있으므로, 가장 안전한 선택은 아예 기록하지 않는 것이라고 판단했습니다.
+
+### Pending — 실기기(iPhone/iPad)에서 확인 필요
+
+- [ ] Snapshots 화면·미리보기가 글자 크기 6단계(6/8/10/12/14/17px) 전부에서 겹치거나 잘리지 않는지
+- [ ] 미리보기의 긴 본문을 스크롤할 때 `.snapshot-preview-text`가 화면 안에서 자연스럽게 스크롤되는지(코드는 `max-height:40vh; overflow-y:auto`)
+- [ ] 한글 IME 조합 중 Snapshots 화면으로 전환했을 때 조합이 깨지지 않는지
+- [ ] `<dialog>` 미리보기가 iOS Safari에서 키보드 유무와 무관하게 Restore/Delete/Close 버튼에 손가락이 닿는지(3버튼 한 줄, 좁은 화면에서 줄바꿈 여부)
+- [ ] iCloud Drive로 내보낸 백업(스냅샷 포함)을 다른 기기에서 가져왔을 때 실제로 스냅샷 목록이 나타나는지

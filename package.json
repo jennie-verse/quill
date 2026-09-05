@@ -1,0 +1,13 @@
+{
+  "name": "quill-webapp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/unit.test.mjs && node tests/dom.test.mjs && node --test tests/sync-contract.test.mjs tests/journal.test.mjs tests/layout.test.mjs",
+    "test:syntax": "node --check src/app.js && node --check src/backup.js && node --check src/editor.js && node --check src/files.js && node --check src/find.js && node --check src/journal-record.js && node --check src/journal.js && node --check src/recovery.js && node --check src/settings.js && node --check src/snapshots.js && node --check src/sync.js && node --check src/version.js && node --check sw.js"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
+  }
+}
