@@ -50,6 +50,12 @@ globals.forEach((key) => {
   });
 });
 
+// Existing installs may have data without any first-release marker. An
+// ordinary app update must restore it, never reset the user's workspace.
+window.localStorage.setItem('text-editor-recovery-fallback-v1', JSON.stringify({
+  text: '업데이트 전 초안', fileName: 'draft.txt', savedAt: new Date().toISOString()
+}));
+window.localStorage.setItem('text-editor-settings-v1', JSON.stringify({ defaultExtension: '.md' }));
 const appUrl = pathToFileURL(resolve(root, 'src/app.js')).href;
 await import(appUrl);
 // init() 은 비동기이므로 마이크로태스크가 끝나기를 기다립니다.
@@ -60,9 +66,10 @@ const $ = (id) => window.document.getElementById(id);
 console.log('[dom] 초기화');
 t('콘솔 오류 0건', consoleErrors.length === 0, consoleErrors.join(' | '));
 t('에디터가 존재한다', Boolean($('editor-body')));
-t('에디터가 비어 있다', $('editor-body').value === '');
-t('파일명 기본값 Untitled', $('file-name-display').textContent === 'Untitled');
-t('상태 표시줄이 채워졌다', $('document-status').textContent === '1 lines · 0 characters');
+t('업데이트 후 기존 초안을 복원한다', $('editor-body').value === '업데이트 전 초안');
+t('업데이트 후 파일명을 복원한다', $('file-name-display').textContent === 'draft.txt');
+t('업데이트 후 기존 설정을 보존한다', $('custom-extension').value === '.md');
+t('상태 표시줄이 채워졌다', $('document-status').textContent === '1 lines · 9 characters');
 
 console.log('[dom] 설정 배선');
 t('UI 크기 버튼 6개', $('interface-size-picker').querySelectorAll('button').length === 6);
@@ -106,6 +113,18 @@ $('find-input').value = '나';
 $('find-input').dispatchEvent(new window.Event('input', { bubbles: true }));
 await new Promise((done) => setTimeout(done, 10));
 t('일치 개수가 표시된다', $('find-count').textContent === '1 / 1', $('find-count').textContent);
+const findInput = $('find-input');
+findInput.focus();
+findInput.dispatchEvent(new window.CompositionEvent('compositionstart', { bubbles: true }));
+const composingEnter = new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+findInput.dispatchEvent(composingEnter);
+t('검색 중 한글 조합 Enter를 가로채지 않는다', !composingEnter.defaultPrevented && window.document.activeElement === findInput);
+findInput.dispatchEvent(new window.CompositionEvent('compositionend', { bubbles: true }));
+const finalImeEnter = new window.KeyboardEvent('keydown', { key: 'Enter', keyCode: 229, bubbles: true, cancelable: true });
+findInput.dispatchEvent(finalImeEnter);
+t('Safari 조합 종료 Enter도 검색창에 머문다', !finalImeEnter.defaultPrevented && window.document.activeElement === findInput);
+findInput.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+t('조합 후 Enter는 검색 결과로 이동한다', window.document.activeElement === $('editor-body') && $('editor-body').selectionStart === 1);
 $('find-input').value = '없는말';
 $('find-input').dispatchEvent(new window.Event('input', { bubbles: true }));
 await new Promise((done) => setTimeout(done, 10));
@@ -118,6 +137,15 @@ $('editor-body').dispatchEvent(new window.Event('input', { bubbles: true }));
 await new Promise((done) => setTimeout(done, 10));
 t('스크립트가 실행되지 않았다', window.__xss === undefined);
 t('파일명은 textContent 로만 들어간다', !$('file-name-display').innerHTML.includes('<img'));
+
+console.log('[dom] 한글 조합 중 페이지 이동 복구');
+$('editor-body').dispatchEvent(new window.CompositionEvent('compositionstart', { bubbles: true }));
+$('editor-body').value = '마지막 한글 조합';
+$('editor-body').dispatchEvent(new window.Event('input', { bubbles: true }));
+window.dispatchEvent(new window.Event('pagehide'));
+const fallback = JSON.parse(window.localStorage.getItem('text-editor-recovery-fallback-v1'));
+t('조합 중 페이지를 떠나도 화면에 보이는 초안을 보관한다', fallback.text === '마지막 한글 조합');
+$('editor-body').dispatchEvent(new window.CompositionEvent('compositionend', { bubbles: true }));
 
 globals.forEach((key) => {
   const descriptor = saved.get(key);

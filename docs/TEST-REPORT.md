@@ -77,3 +77,12 @@ jsdom은 Safari가 아니고, 파일 선택·공유 시트·IndexedDB·키보드
 
 1. 위 Pending 8건을 실기기에서 확인
 2. `docs/GITHUB-PAGES-KO.md` 순서대로 배포 확인
+
+
+## 2026-09-08 안정성 개선 검증
+
+- 수정: Find 및 편집기의 한글 조합 Enter 보호, 페이지 이동 시 화면의 최신 초안 복구, 업데이트 시 초안·설정 보존.
+- 로컬 회귀 검사 및 JavaScript 문법 검사: 통과.
+- Chromium 1280×900 / 390×844: 주요 조작, 재시작 후 기존 데이터 보존, 화면·페이지 오류 검사 통과.
+- Service Worker를 통한 오프라인 앱 재실행: 통과.
+- 실제 iPhone/iPad Safari, iCloud 공유, 실제 비공개 GitHub 데이터 동기화: 실기기 확인 필요.

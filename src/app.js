@@ -692,7 +692,7 @@ function bind() {
 
   editor.addEventListener('keydown', (event) => {
     // 한글 조합 중에는 키를 가로채지 않습니다.
-    if (state.composing || event.isComposing) return;
+    if (state.composing || event.isComposing || event.keyCode === 229) return;
 
     if (event.key === 'Tab') {
       event.preventDefault();
@@ -770,7 +770,11 @@ function bind() {
     state.find.index = -1;
     refreshFind();
   });
+  let findComposing = false;
+  el['find-input'].addEventListener('compositionstart', () => { findComposing = true; });
+  el['find-input'].addEventListener('compositionend', () => { findComposing = false; });
   el['find-input'].addEventListener('keydown', (event) => {
+    if (findComposing || event.isComposing || event.keyCode === 229) return;
     if (event.key === 'Enter') {
       event.preventDefault();
       moveFind(event.shiftKey ? -1 : 1);
@@ -940,12 +944,12 @@ function bind() {
 
   // 앱을 떠나기 전에 초안을 한 번 더 적어 둡니다.
   window.addEventListener('pagehide', () => {
-    writeFallbackDraft({ text: state.text, fileName: state.fileName });
+    writeFallbackDraft({ text: editor.value, fileName: state.fileName });
   });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-      writeFallbackDraft({ text: state.text, fileName: state.fileName });
-      saveDraftNow();
+      writeFallbackDraft({ text: editor.value, fileName: state.fileName });
+      if (!state.composing) saveDraftNow();
     }
   });
   window.addEventListener('beforeunload', (event) => {
@@ -994,38 +998,7 @@ async function restoreDraft() {
   toast('Draft restored — recovered from this device.');
 }
 
-// One-time reset for the 2026-09-05 "first release" restamp: wipes quill's
-// own localStorage/IndexedDB so every device starts clean under the new
-// version, exactly once. Gated on APP_BUILD so it never runs again after
-// this deploy. Deliberately leaves 'sync.token.v1' untouched — that key is
-// shared across all Published/* apps on the same github.io origin (see
-// src/sync.js), not quill-only, so wiping it here would sign the user out
-// of sync in every other app too.
-const FRESH_START_MARKER = 'quill.freshStart.' + APP_BUILD;
-function runFreshStartResetOnce() {
-  try {
-    if (localStorage.getItem(FRESH_START_MARKER)) return;
-  } catch (error) {
-    return; // localStorage unavailable — skip silently, nothing to migrate.
-  }
-  const quillOnlyKeys = [
-    SETTINGS_KEY,                        // text-editor-settings-v1
-    'text-editor-recovery-fallback-v1',
-    'quill.journalEnabled.v1',
-    'quill.journalActivity.v1',
-    'quill.syncEnabled',
-    'quill.lastSyncAt',
-    'quill.settingsUpdatedAt',
-  ];
-  quillOnlyKeys.forEach((key) => { try { localStorage.removeItem(key); } catch (error) { /* 무시 */ } });
-  try {
-    if ('indexedDB' in window) indexedDB.deleteDatabase('text-editor-recovery');
-  } catch (error) { /* 무시 */ }
-  try { localStorage.setItem(FRESH_START_MARKER, '1'); } catch (error) { /* 무시 */ }
-}
-
 async function init() {
-  runFreshStartResetOnce();
   collect();
   const today = new Date(); const start = new Date(); start.setDate(start.getDate() - 90); el['journal-from'].value = start.toISOString().slice(0, 10); el['journal-to'].value = today.toISOString().slice(0, 10);
   renderSettings();
