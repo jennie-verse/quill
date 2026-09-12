@@ -38,7 +38,7 @@
 
   /* 4단계(12px)가 기본입니다. app.js 가 이 값을 바꿉니다. */
   --ui-size: 12px;
-  --editor-size: 16px;
+  --editor-size: 12px;
 
   --touch: 44px;
   --radius: 10px;

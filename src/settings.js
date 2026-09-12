@@ -8,15 +8,16 @@
 
 export const SETTINGS_KEY = 'text-editor-settings-v1';
 
-// WebApp_House_Style.md 3장: 앱 UI 글자 크기 6단계. 기본은 4단계(12px).
-export const INTERFACE_SIZES = Object.freeze([6, 8, 10, 12, 14, 17]);
+// WebApp_House_Style.md 3장: 앱 UI 글자 크기 4단계. 기본은 12px.
+export const INTERFACE_SIZES = Object.freeze([6, 8, 10, 12]);
 export const DEFAULT_INTERFACE_SIZE = 12;
 
 // 에디터 본문은 UI와 별개로 조절합니다.
-// 16px 아래로 내리지 않는 이유: iPhone Safari가 16px 미만 입력창을 탭할 때
-// 화면을 자동 확대합니다 (WebApp_House_Style.md 3장, 예외 없는 규칙).
-export const EDITOR_SIZES = Object.freeze([16, 18, 20, 24, 28, 32]);
-export const DEFAULT_EDITOR_SIZE = 16;
+// 2026-09-12: 사용자 요청으로 WebApp_House_Style.md의 "입력창 16px 고정"
+// 규칙에 대한 명시적 예외를 Quill 에디터에 적용합니다. iPhone Safari에서
+// 12px 이하로 설정한 상태로 에디터를 탭하면 화면이 자동 확대될 수 있습니다.
+export const EDITOR_SIZES = Object.freeze([6, 8, 10, 12]);
+export const DEFAULT_EDITOR_SIZE = 12;
 
 export const TAB_SIZES = Object.freeze([2, 4, 8]);
 export const DEFAULT_TAB_SIZE = 2;
