@@ -72,8 +72,8 @@ t('업데이트 후 기존 설정을 보존한다', $('custom-extension').value 
 t('상태 표시줄이 채워졌다', $('document-status').textContent === '1 lines · 9 characters');
 
 console.log('[dom] 설정 배선');
-t('UI 크기 버튼 4개', $('interface-size-picker').querySelectorAll('button').length === 4);
-t('에디터 크기 버튼 4개', $('editor-size-picker').querySelectorAll('button').length === 4);
+t('UI 크기 버튼 6개', $('interface-size-picker').querySelectorAll('button').length === 6);
+t('에디터 크기 버튼 6개', $('editor-size-picker').querySelectorAll('button').length === 6);
 t('기본 12px 선택됨',
   $('interface-size-picker').querySelector('button[data-size="12"]').getAttribute('aria-pressed') === 'true');
 t('기본 12px 선택됨(에디터)',

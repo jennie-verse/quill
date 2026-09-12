@@ -38,7 +38,6 @@
 
   /* 4단계(12px)가 기본입니다. app.js 가 이 값을 바꿉니다. */
   --ui-size: 12px;
-  --editor-size: 12px;
 
   --touch: 44px;
   --radius: 10px;
@@ -256,6 +255,7 @@ a:focus-visible {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
+  overflow: hidden;
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }
@@ -272,9 +272,12 @@ a:focus-visible {
   color: var(--text);
   /* 본문은 코드·표가 어긋나지 않도록 고정폭 글꼴을 씁니다. */
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Courier New", monospace;
-  font-size: var(--editor-size);
+  /* 16px 고정 (iPhone Safari 자동 확대 방지, 예외 없음). Text Size가 16px
+     미만이면 app.js가 이 크기는 그대로 두고 transform으로만 축소해 보여줍니다. */
+  font-size: 16px;
   line-height: 1.55;
   tab-size: 2;
+  transform-origin: top left;
   -webkit-text-size-adjust: 100%;
 }
 

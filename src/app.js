@@ -174,10 +174,41 @@ function applyInterfaceSize() {
   });
 }
 
+// 에디터의 실제 font-size는 CSS에서 16px로 고정되어 있습니다(iPhone Safari
+// 자동 확대 방지 — 이 값을 바꾸면 그 규칙이 깨집니다). 16px보다 작은 Text
+// Size는 font-size 대신 CSS transform으로 시각적으로만 축소해 보여줍니다.
+// 브라우저가 자동 확대 여부를 판단할 때 보는 값은 transform 이전의
+// font-size이므로, 이 방식은 화면 확대를 유발하지 않습니다.
+const EDITOR_BASE_SIZE = 16;
+
 function applyEditorSize() {
-  document.documentElement.style.setProperty('--editor-size', `${state.settings.editorSize}px`);
+  const editor = el['editor-body'];
+  const size = state.settings.editorSize;
+  const scale = size / EDITOR_BASE_SIZE;
+
+  if (scale >= 1) {
+    editor.style.flex = '';
+    editor.style.transform = '';
+    editor.style.width = '';
+    editor.style.height = '';
+  } else if (editor.offsetParent) {
+    const rect = editor.parentElement.getBoundingClientRect();
+    // 화면 전환 중이라 아직 실제 크기가 없으면 건너뜁니다 — 다시 보이게 되면
+    // ResizeObserver(bind() 참고)가 정확한 크기로 다시 계산합니다.
+    if (rect.width > 0 && rect.height > 0) {
+      // flex:1 1 auto(기본값)를 두면 flexbox가 아래 explicit width/height를
+      // 다시 컨테이너 크기에 맞춰 줄여버려 transform과 이중으로 겹쳐 실제
+      // 표시 크기가 의도보다 더 작아집니다. flex-shrink/grow를 꺼서 우리가
+      // 지정한 크기를 그대로 쓰게 합니다.
+      editor.style.flex = '0 0 auto';
+      editor.style.transform = `scale(${scale})`;
+      editor.style.width = `${rect.width / scale}px`;
+      editor.style.height = `${rect.height / scale}px`;
+    }
+  }
+
   el['editor-size-picker'].querySelectorAll('button[data-size]').forEach((button) => {
-    button.setAttribute('aria-pressed', String(Number(button.dataset.size) === state.settings.editorSize));
+    button.setAttribute('aria-pressed', String(Number(button.dataset.size) === size));
   });
 }
 
@@ -577,6 +608,7 @@ function openSettings() {
 function closeSettings() {
   el['settings-screen'].hidden = true;
   el['editor-screen'].hidden = false;
+  applyEditorSize();
   el['editor-body'].focus();
 }
 
@@ -675,6 +707,7 @@ async function openSnapshots() {
 function closeSnapshotsScreen() {
   el['snapshots-screen'].hidden = true;
   el['editor-screen'].hidden = false;
+  applyEditorSize();
   el['editor-body'].focus();
 }
 
@@ -957,6 +990,16 @@ function bind() {
     event.preventDefault();
     event.returnValue = '';
   });
+
+  // 회전·분할 화면·화면 전환(hidden↔visible) 등으로 에디터 영역 크기가
+  // 바뀔 때마다 축소 표시 크기를 다시 맞춥니다. ResizeObserver는 요소가
+  // display:none에서 다시 보이게 될 때도 크기 변화로 인식해 호출되므로,
+  // 설정/스냅샷 화면을 닫을 때 크기가 아직 0일 수 있는 문제를 함께 해결합니다.
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(() => applyEditorSize()).observe(editor.parentElement);
+  } else {
+    window.addEventListener('resize', () => applyEditorSize());
+  }
 }
 
 /* ── Service Worker ──────────────────────────────────────────────── */
