@@ -2,7 +2,7 @@
 
 ## 무엇인지
 
-Quill은 iPhone·iPad에서 텍스트 파일을 편집하는 개인용 웹앱입니다. Mac의 TextEdit 자리를 iOS에서 대신합니다.
+Quill은 iPhone·폴더블(iPhone Duo)·iPad·Mac Safari에서 텍스트 파일을 편집하는 개인용 웹앱입니다. Mac의 TextEdit 자리를 iOS에서 대신합니다.
 
 - 파일은 **iOS Files 앱**에 있습니다. Quill은 그때그때 열어서 편집하고 다시 내보냅니다.
 - 문서 라이브러리가 아닙니다. 앱 안에 여러 파일을 쌓아 두지 않습니다.

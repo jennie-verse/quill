@@ -186,6 +186,8 @@ function applyEditorSize() {
   const size = state.settings.editorSize;
   const scale = size / EDITOR_BASE_SIZE;
 
+  editor.style.setProperty('--editor-scale', String(Math.min(scale, 1)));
+
   if (scale >= 1) {
     editor.style.flex = '';
     editor.style.transform = '';

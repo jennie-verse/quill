@@ -52,7 +52,12 @@ html, body {
   padding: 0;
   height: 100%;
   overflow: hidden;
+  /* 홈 화면 앱에서 가장자리를 당길 때 화면이 출렁이지 않게 합니다. */
+  overscroll-behavior: none;
 }
+
+/* 더블탭 지연·더블탭 확대 없이 바로 반응하게 합니다(핀치 확대는 그대로). */
+button, input, label, summary, a { touch-action: manipulation; }
 
 body {
   background: var(--bg);
@@ -256,6 +261,8 @@ a:focus-visible {
   min-height: 0;
   display: flex;
   overflow: hidden;
+  /* 펼친 넓은 화면에서 본문 폭을 계산하는 기준(cqw)입니다. */
+  container-type: inline-size;
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }
@@ -620,9 +627,45 @@ a:focus-visible {
   .file-name { margin-left: 2px; margin-right: 2px; }
 }
 
-/* iPad 등 넓은 화면에서는 설정 카드가 지나치게 늘어나지 않게 합니다. */
+/* 접으면 폰, 펼치면 태블릿인 기기(iPhone Duo)와 Mac의 넓은 창:
+   화면 폭이 바뀌어도 읽기 좋은 폭을 유지합니다. 폭은 CSS 한 곳에서만 정합니다. */
 @media (min-width: 760px) {
   .settings-body { max-width: 720px; width: 100%; margin: 0 auto; }
+  .sheet { width: min(80vw, 480px); }
+}
+
+/* 펼친 화면: 설정 카드를 2열로 나란히 놓아 스크롤을 줄입니다. */
+@media (min-width: 880px) {
+  .settings-body {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 12px;
+    max-width: 980px;
+  }
+}
+
+/* 줄바꿈을 켠 본문은 아주 넓은 화면에서 한 줄이 너무 길어지지 않도록
+   좌우 여백으로 가운데 정렬합니다. 영역 전체가 계속 탭·입력 가능하고,
+   --editor-scale 은 app.js 가 작은 Text Size(축소 표시)를 보정하려고 넣는 값입니다. */
+@media (min-width: 760px) {
+  .editor-body[data-wrap="true"] {
+    padding-left: max(12px, calc((100cqw / var(--editor-scale, 1) - 96ch) / 2));
+    padding-right: max(12px, calc((100cqw / var(--editor-scale, 1) - 96ch) / 2));
+  }
+}
+
+/* 마우스·트랙패드(Mac)에서만 hover 표시. 터치 기기에서는 적용되지 않으며,
+   hover 에만 의존하는 기능은 없습니다. */
+@media (hover: hover) and (pointer: fine) {
+  .icon-button:hover,
+  .wide-button:hover,
+  .text-button:hover { background: var(--rose); }
+  .size-picker button:hover,
+  .segmented button:hover,
+  .quick-extensions button:hover { background: var(--rose); }
+  .snapshot-row:hover { background: var(--rose-tint); }
+  .editor-body { scrollbar-color: var(--rose) transparent; }
 }
 
 /* ── 접근성 ───────────────────────────────────────────────────────── */
