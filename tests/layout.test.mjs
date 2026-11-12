@@ -28,7 +28,11 @@ test('Open/New/Snapshots/Settings are consolidated into the menu dialog, each ke
 
 test('wide/unfolded screens: capped reading width, two-column settings, Mac hover only for fine pointers', () => {
   const css = read('../assets/app.css');
-  assert.match(css, /@media \(min-width: 880px\)[\s\S]*grid-template-columns: repeat\(2/);
+  assert.ok(css.includes('@media (min-width: 640px) and (min-height: 560px)'));
+  assert.match(css, /@media \(min-width: 640px\) and \(min-height: 560px\) \{\s*\.settings-body \{[^}]*\}\s*\.sheet/);
+  assert.match(css, /@media \(min-width: 640px\) and \(min-height: 560px\)[\s\S]*grid-template-columns: repeat\(2/);
+  assert.match(css, /@media \(min-width: 880px\)/);
+  assert.doesNotMatch(css, /@media \(min-width: 760px\)/);
   assert.match(css, /\.editor-body\[data-wrap="true"\][\s\S]*100cqw \/ var\(--editor-scale, 1\)/);
   assert.match(css, /@media \(hover: hover\) and \(pointer: fine\)/);
   // The editor font itself must stay 16px (no iOS focus zoom).

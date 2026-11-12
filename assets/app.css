@@ -629,26 +629,30 @@ a:focus-visible {
 
 /* 접으면 폰, 펼치면 태블릿인 기기(iPhone Duo)와 Mac의 넓은 창:
    화면 폭이 바뀌어도 읽기 좋은 폭을 유지합니다. 폭은 CSS 한 곳에서만 정합니다. */
-@media (min-width: 760px) {
+@media (min-width: 640px) and (min-height: 560px) {
   .settings-body { max-width: 720px; width: 100%; margin: 0 auto; }
   .sheet { width: min(80vw, 480px); }
 }
 
-/* 펼친 화면: 설정 카드를 2열로 나란히 놓아 스크롤을 줄입니다. */
-@media (min-width: 880px) {
+/* 펼친 세로 화면(669px 폭): 설정 카드를 2열로 나란히 놓습니다(열당 약 300px 이상). */
+@media (min-width: 640px) and (min-height: 560px) {
   .settings-body {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: start;
     gap: 12px;
-    max-width: 980px;
   }
+}
+
+/* 넓은 화면(가로로 펼침·Mac): 설정 폭만 더 넓힙니다. */
+@media (min-width: 880px) {
+  .settings-body { max-width: 980px; }
 }
 
 /* 줄바꿈을 켠 본문은 아주 넓은 화면에서 한 줄이 너무 길어지지 않도록
    좌우 여백으로 가운데 정렬합니다. 영역 전체가 계속 탭·입력 가능하고,
    --editor-scale 은 app.js 가 작은 Text Size(축소 표시)를 보정하려고 넣는 값입니다. */
-@media (min-width: 760px) {
+@media (min-width: 640px) and (min-height: 560px) {
   .editor-body[data-wrap="true"] {
     padding-left: max(12px, calc((100cqw / var(--editor-scale, 1) - 96ch) / 2));
     padding-right: max(12px, calc((100cqw / var(--editor-scale, 1) - 96ch) / 2));
