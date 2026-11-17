@@ -194,7 +194,15 @@ function applyEditorSize() {
     editor.style.width = '';
     editor.style.height = '';
   } else if (editor.offsetParent) {
-    const rect = editor.parentElement.getBoundingClientRect();
+    const parent = editor.parentElement;
+    const box = parent.getBoundingClientRect();
+    // 부모의 좌우·상하 패딩(가로 화면의 안전영역 여백 등)을 뺀 안쪽 크기를 씁니다.
+    // 패딩을 빼지 않으면 가로 화면에서 에디터가 안전영역 여백만큼 오른쪽으로 넘쳐 글자가 잘립니다.
+    const pcs = getComputedStyle(parent);
+    const rect = {
+      width: box.width - (parseFloat(pcs.paddingLeft) || 0) - (parseFloat(pcs.paddingRight) || 0),
+      height: box.height - (parseFloat(pcs.paddingTop) || 0) - (parseFloat(pcs.paddingBottom) || 0),
+    };
     // 화면 전환 중이라 아직 실제 크기가 없으면 건너뜁니다 — 다시 보이게 되면
     // ResizeObserver(bind() 참고)가 정확한 크기로 다시 계산합니다.
     if (rect.width > 0 && rect.height > 0) {

@@ -43,3 +43,10 @@ test('the build stamp in version.js matches VERSION in sw.js', () => {
   const stamp = read('../src/version.js').match(/APP_BUILD = '([^']+)'/)[1];
   assert.equal(read('../sw.js').match(/const VERSION = '([^']+)'/)[1], stamp);
 });
+
+test('scaled (small Text Size) editor width excludes the editor area padding, so landscape safe-area insets cannot clip text', () => {
+  const js = read('../src/app.js');
+  assert.match(js, /const pcs = getComputedStyle\(parent\);/);
+  assert.match(js, /box\.width - \(parseFloat\(pcs\.paddingLeft\) \|\| 0\) - \(parseFloat\(pcs\.paddingRight\) \|\| 0\)/);
+  assert.match(js, /editor\.style\.width = `\$\{rect\.width \/ scale\}px`;/);
+});
